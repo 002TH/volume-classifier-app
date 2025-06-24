@@ -54,6 +54,13 @@ async def dashboard(request: Request):
     data = get_sol_data()
     color = get_color(data)
     
+    # Safely format the numbers
+    current_volume = f"{data['current_volume']:,.0f}" if data else "N/A"
+    prev_volume = f"{data['prev_volume']:,.0f}" if data else "N/A"
+    open_price = f"{data['open']:.4f}" if data else "N/A"
+    close_price = f"{data['close']:.4f}" if data else "N/A"
+    timestamp = data['timestamp'] if data else "N/A"
+    
     return f"""
     <!DOCTYPE html>
     <html>
@@ -112,7 +119,7 @@ async def dashboard(request: Request):
                     <option value="15m">15 Minutes</option>
                 </select>
                 <button onclick="loadData()">Refresh</button>
-                <span id="lastUpdate"></span>
+                <span id="lastUpdate">{timestamp}</span>
             </div>
             
             <div class="chart-container">
@@ -122,15 +129,15 @@ async def dashboard(request: Request):
             <div class="info">
                 <div>
                     <strong>Current Volume:</strong> 
-                    <span id="currentVolume">{data['current_volume']:,.0f if data else 'N/A'}</span>
+                    <span id="currentVolume">{current_volume}</span>
                 </div>
                 <div>
                     <strong>Previous Volume:</strong> 
-                    <span id="prevVolume">{data['prev_volume']:,.0f if data else 'N/A'}</span>
+                    <span id="prevVolume">{prev_volume}</span>
                 </div>
                 <div>
                     <strong>Price:</strong> 
-                    <span id="price">{data['open']:.4f if data else 'N/A'} → {data['close']:.4f if data else 'N/A'}</span>
+                    <span id="price">{open_price} → {close_price}</span>
                 </div>
             </div>
             

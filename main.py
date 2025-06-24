@@ -23,8 +23,8 @@ class Candle(BaseModel):
     volume: float
 
 @app.get("/", response_class=HTMLResponse)
-async def root():
-    return HTMLResponse("<h1>Hello, the app is working!</h1>")
+async def root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
     
 @app.post("/classify")
 def classify_candles(candles: List[Candle]):

@@ -218,7 +218,7 @@ async def dashboard(request: Request):
                         tooltip: {{
                             callbacks: {{
                                 label: function(context) {{
-                                    return `Volume: ${context.raw.toLocaleString()}`;
+                                    return 'Volume: ' + context.raw.toLocaleString();
                                 }}
                             }}
                         }}

@@ -1,11 +1,9 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTML response
 import requests
 import os
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 BINANCE_API = "https://api.binance.com/api/v3"
 TIMEFRAMES = ["1m", "2m", "3m", "5m", "15m"]

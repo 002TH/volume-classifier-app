@@ -43,7 +43,7 @@ def get_pressure(data):
     
     volume_change = data['current_volume'] - data['prev_volume']
     price_change = data['close'] - data['open']
-    volume_change_pct = volume_change / data['prev_volume']
+    volume_change_pct = volume_change / data['prev_volume'] if data['prev_volume'] > 0 else 0
     
     if volume_change <= 0:
         return "Weak Pressure", "#95a5a6"
@@ -179,8 +179,16 @@ async def dashboard(request: Request):
                 </div>
                 <div class="info-card">
                     <strong>Change</strong>
-                    <div>Volume: <span id="volumeChange">{round((float(current_volume.replace(',',''))/float(prev_volume.replace(',',''))-1)*100 if data else 0, 2)}%</span></div>
-                    <div>Price: <span id="priceChange">{round((float(close_price)/float(open_price)-1)*100 if data else 0, 2)}%</span></div>
+                    <div>Volume: <span id="volumeChange">{
+                        round((float(current_volume.replace(',',''))/float(prev_volume.replace(',',''))-1)*100, 2) 
+                        if data and prev_volume != 'N/A' and float(prev_volume.replace(',','')) > 0 
+                        else 0
+                    }%</span></div>
+                    <div>Price: <span id="priceChange">{
+                        round((float(close_price)/float(open_price)-1)*100, 2) 
+                        if data and open_price != 'N/A' and float(open_price) > 0 
+                        else 0
+                    }%</span></div>
                 </div>
             </div>
             
@@ -209,7 +217,7 @@ async def dashboard(request: Request):
                         legend: {{ display: false }},
                         tooltip: {{
                             callbacks: {{
-                                label: (context) => {{
+                                label: function(context) {{
                                     return `Volume: ${context.raw.toLocaleString()}`;
                                 }}
                             }}
@@ -219,7 +227,9 @@ async def dashboard(request: Request):
                         y: {{
                             beginAtZero: false,
                             ticks: {{
-                                callback: (value) => value.toLocaleString()
+                                callback: function(value) {{
+                                    return value.toLocaleString();
+                                }}
                             }}
                         }}
                     }}

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Volume Classifier</title>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background-color: #f2f2f2; }
+  </style>
+</head>
+<body>
+  <h2>Volume Classifier</h2>
+  <label for="timeframe">Select Timeframe: </label>
+  <select id="timeframe">
+    <option value="1m">1m</option>
+    <option value="5m">5m</option>
+    <option value="15m">15m</option>
+    <option value="1h">1h</option>
+  </select>
+  <button onclick="loadData()">Load</button>
+  <table id="resultTable">
+    <tr><th>#</th><th>Open</th><th>Close</th><th>Volume</th><th>Color</th></tr>
+  </table>
+
+  <script>
+    async function loadData() {
+      const tf = document.getElementById("timeframe").value;
+      const url = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${tf}&limit=20`;
+      const raw = await fetch(url).then(r => r.json());
+      const candles = raw.map(k => ({
+        open: parseFloat(k[1]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5])
+      }));
+
+      const result = await fetch("/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(candles)
+      });
+      const data = await result.json();
+
+      const table = document.getElementById("resultTable");
+      table.innerHTML = `<tr><th>#</th><th>Open</th><th>Close</th><th>Volume</th><th>Color</th></tr>`;
+      data.classified.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.index}</td>
+          <td>${row.open}</td>
+          <td>${row.close}</td>
+          <td>${row.volume}</td>
+          <td style="background:${row.color};color:white">${row.color.toUpperCase()}</td>
+        `;
+        table.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>

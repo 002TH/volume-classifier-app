@@ -56,5 +56,5 @@ def classify_candles(candles: List[Candle]):
             "volume": curr.volume,
             "color": color
         })
-
+        
     return {"classified": results}

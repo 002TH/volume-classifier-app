@@ -1,153 +1,212 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from datetime import datetime
 import requests
-import os
 
 app = FastAPI()
 
+# Binance API configuration
 BINANCE_API = "https://api.binance.com/api/v3"
-TIMEFRAMES = ["1m", "2m", "3m", "5m", "15m"]
+TIMEFRAMES = ["1m", "3m", "5m", "15m"]
 
-def get_sol_data(timeframe):
-    response = requests.get(f"{BINANCE_API}/klines?symbol=SOLUSDT&interval={timeframe}&limit=2")
-    data = response.json()
-    return {
-        "timeframe": timeframe,
-        "current_volume": float(data[-1][5]),
-        "prev_volume": float(data[-2][5]),
-        "open": float(data[-1][1]),
-        "close": float(data[-1][4]),
-        "timestamp": datetime.fromtimestamp(data[-1][0]/1000).strftime('%H:%M:%S')
-    }
+def get_sol_data(timeframe="5m"):
+    """Fetch SOL/USDT data from Binance"""
+    try:
+        response = requests.get(
+            f"{BINANCE_API}/klines",
+            params={
+                "symbol": "SOLUSDT",
+                "interval": timeframe,
+                "limit": 2
+            },
+            timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        return {
+            "timeframe": timeframe,
+            "current_volume": float(data[-1][5]),
+            "prev_volume": float(data[-2][5]),
+            "open": float(data[-1][1]),
+            "close": float(data[-1][4]),
+            "timestamp": datetime.fromtimestamp(data[-1][0]/1000).strftime('%H:%M:%S')
+        }
+    except Exception as e:
+        print(f"Error fetching data: {e}")
+        return None
 
 def get_color(data):
+    """Determine bar color based on your rules"""
+    if not data:
+        return "gray"
     if data["current_volume"] <= data["prev_volume"]:
         return "gray"
     elif data["close"] > data["open"]:
-        return "darkgreen"
+        return "#2ecc71"  # green
     elif data["close"] < data["open"]:
-        return "darkred"
-    return "green"
+        return "#e74c3c"  # red
+    return "#3498db"  # blue
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return """
+    """Main dashboard page"""
+    data = get_sol_data()
+    color = get_color(data)
+    
+    return f"""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>SOL Multi-Timeframe Dashboard</title>
+        <title>SOLUSDT Volume Dashboard</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
         <style>
-            body { font-family: Arial; padding: 20px; max-width: 1200px; margin: 0 auto; }
-            .chart-container { display: flex; flex-wrap: wrap; gap: 20px; }
-            .chart-box { width: 45%; min-width: 400px; height: 300px; }
-            .controls { margin: 20px 0; text-align: center; }
-            select { padding: 8px; font-size: 16px; }
-            .timestamp { font-size: 12px; color: #666; text-align: right; }
+            body {{
+                font-family: Arial, sans-serif;
+                max-width: 1000px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+            .container {{
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }}
+            .chart-container {{
+                width: 100%;
+                height: 400px;
+            }}
+            .controls {{
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }}
+            select {{
+                padding: 8px;
+                font-size: 16px;
+            }}
+            .info {{
+                display: flex;
+                justify-content: space-between;
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 5px;
+            }}
+            .error {{
+                color: red;
+                padding: 10px;
+                background: #ffeeee;
+                border-radius: 5px;
+            }}
         </style>
     </head>
     <body>
-        <h1 style="text-align: center;">SOL/USDT Volume Dashboard</h1>
-        
-        <div class="controls">
-            <select id="timeframe" onchange="loadData()">
-                <option value="1m">1 Minute</option>
-                <option value="2m">2 Minutes</option>
-                <option value="3m">3 Minutes</option>
-                <option value="5m" selected>5 Minutes</option>
-                <option value="15m">15 Minutes</option>
-            </select>
-        </div>
-
-        <div class="chart-container">
-            <div class="chart-box">
+        <div class="container">
+            <h1>SOL/USDT Volume Dashboard</h1>
+            
+            <div class="controls">
+                <select id="timeframe" onchange="loadData()">
+                    <option value="1m">1 Minute</option>
+                    <option value="3m">3 Minutes</option>
+                    <option value="5m" selected>5 Minutes</option>
+                    <option value="15m">15 Minutes</option>
+                </select>
+                <button onclick="loadData()">Refresh</button>
+                <span id="lastUpdate"></span>
+            </div>
+            
+            <div class="chart-container">
                 <canvas id="volumeChart"></canvas>
-                <div class="timestamp" id="timestamp"></div>
             </div>
-            <div class="chart-box">
-                <canvas id="priceChart"></canvas>
-                <div class="timestamp" id="priceTimestamp"></div>
+            
+            <div class="info">
+                <div>
+                    <strong>Current Volume:</strong> 
+                    <span id="currentVolume">{data['current_volume']:,.0f if data else 'N/A'}</span>
+                </div>
+                <div>
+                    <strong>Previous Volume:</strong> 
+                    <span id="prevVolume">{data['prev_volume']:,.0f if data else 'N/A'}</span>
+                </div>
+                <div>
+                    <strong>Price:</strong> 
+                    <span id="price">{data['open']:.4f if data else 'N/A'} → {data['close']:.4f if data else 'N/A'}</span>
+                </div>
             </div>
+            
+            <div id="error" class="error" style="display: none;"></div>
         </div>
 
         <script>
-            let volumeChart, priceChart;
-            let refreshInterval = 3000; // 3 seconds
+            // Initialize chart
+            const ctx = document.getElementById('volumeChart').getContext('2d');
+            let chart = new Chart(ctx, {{
+                type: 'bar',
+                data: {{
+                    labels: ['Current Volume'],
+                    datasets: [{{
+                        label: 'SOL Volume',
+                        data: [{data['current_volume'] if data else 0}],
+                        backgroundColor: '{color}'
+                    }}]
+                }},
+                options: {{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {{
+                        y: {{
+                            beginAtZero: false
+                        }}
+                    }}
+                }}
+            }});
             
-            function initCharts() {
-                const volumeCtx = document.getElementById('volumeChart');
-                const priceCtx = document.getElementById('priceChart');
-                
-                volumeChart = new Chart(volumeCtx, {
-                    type: 'bar',
-                    data: { datasets: [] },
-                    options: { responsive: true, maintainAspectRatio: false }
-                });
-                
-                priceChart = new Chart(priceCtx, {
-                    type: 'line',
-                    data: { datasets: [] },
-                    options: { responsive: true, maintainAspectRatio: false }
-                });
-                
-                loadData();
-                setInterval(loadData, refreshInterval);
-            }
+            // Auto-refresh every 3 seconds
+            setInterval(loadData, 3000);
             
-            async function loadData() {
+            async function loadData() {{
                 const timeframe = document.getElementById('timeframe').value;
-                try {
-                    const response = await axios.get(`/data?timeframe=${timeframe}`);
-                    updateCharts(response.data);
-                } catch (error) {
-                    console.error("Error loading data:", error);
-                }
-            }
+                try {{
+                    const response = await fetch(`/data?timeframe=${{timeframe}}`);
+                    const data = await response.json();
+                    
+                    if (data.error) {{
+                        showError(data.error);
+                        return;
+                    }}
+                    
+                    // Update chart
+                    chart.data.datasets[0].data = [data.current_volume];
+                    chart.data.datasets[0].backgroundColor = data.color;
+                    chart.update();
+                    
+                    // Update info
+                    document.getElementById('currentVolume').textContent = data.current_volume.toLocaleString();
+                    document.getElementById('prevVolume').textContent = data.prev_volume.toLocaleString();
+                    document.getElementById('price').textContent = `${{data.open.toFixed(4)}} → ${{data.close.toFixed(4)}}`;
+                    document.getElementById('lastUpdate').textContent = `Last update: ${{data.timestamp}}`;
+                    document.getElementById('error').style.display = 'none';
+                }} catch (e) {{
+                    showError("Failed to load data: " + e.message);
+                }}
+            }}
             
-            function updateCharts(data) {
-                // Volume Chart
-                volumeChart.data = {
-                    labels: ['Current', 'Previous'],
-                    datasets: [{
-                        label: `Volume (${data.timeframe})`,
-                        data: [data.current_volume, data.prev_volume],
-                        backgroundColor: [get_color(data), 'lightgray']
-                    }]
-                };
-                volumeChart.update();
-                document.getElementById('timestamp').textContent = `Last update: ${data.timestamp}`;
-                
-                // Price Chart
-                priceChart.data = {
-                    labels: ['Open', 'Close'],
-                    datasets: [{
-                        label: `Price (${data.timeframe})`,
-                        data: [data.open, data.close],
-                        borderColor: data.close > data.open ? 'green' : 'red',
-                        backgroundColor: data.close > data.open ? 'rgba(0,255,0,0.1)' : 'rgba(255,0,0,0.1)',
-                        borderWidth: 2
-                    }]
-                };
-                priceChart.update();
-                document.getElementById('priceTimestamp').textContent = `Last update: ${data.timestamp}`;
-            }
-            
-            function get_color(data) {
-                if (data.current_volume <= data.prev_volume) return 'gray';
-                return data.close > data.open ? 'darkgreen' : 
-                       data.close < data.open ? 'darkred' : 'green';
-            }
-            
-            window.onload = initCharts;
+            function showError(message) {{
+                const errorEl = document.getElementById('error');
+                errorEl.textContent = message;
+                errorEl.style.display = 'block';
+            }}
         </script>
     </body>
     </html>
     """
 
 @app.get("/data")
-async def get_data(timeframe: str):
+async def get_data(timeframe: str = "5m"):
+    """Endpoint for AJAX data requests"""
     data = get_sol_data(timeframe)
+    if not data:
+        return {"error": "Failed to fetch data from Binance"}
     return {
         **data,
         "color": get_color(data)

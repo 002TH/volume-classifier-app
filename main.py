@@ -224,3 +224,19 @@ async def redirect_to_dashboard():
     return HTMLResponse("""
         <script>window.location.href = '/dashboard';</script>
     """)
+    
+    @app.get("/test")
+async def test_page():
+    return HTMLResponse("""
+    <!DOCTYPE html>
+    <html>
+    <body>
+        <h1 style="color: red;">If you see this, FastAPI is working!</h1>
+        <p>Now check these endpoints:</p>
+        <ul>
+            <li><a href="/api/history?timeframe=5m">/api/history</a></li>
+            <li><a href="/static">/static</a></li>
+        </ul>
+    </body>
+    </html>
+    """)

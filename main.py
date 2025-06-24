@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTML response
+from fastapi.responses import HTMLResponse
 import requests
 import os
 

@@ -36,25 +36,36 @@ def get_sol_data(timeframe="5m"):
         print(f"Error fetching data: {e}")
         return None
 
-def get_color(data):
-    """Determine bar color based on your rules"""
+def get_pressure(data):
+    """Enhanced pressure detection"""
     if not data:
-        return "gray"
-    if data["current_volume"] <= data["prev_volume"]:
-        return "gray"
-    elif data["close"] > data["open"]:
-        return "#2ecc71"  # green
-    elif data["close"] < data["open"]:
-        return "#e74c3c"  # red
-    return "#3498db"  # blue
+        return "No Data", "gray"
+    
+    volume_change = data['current_volume'] - data['prev_volume']
+    price_change = data['close'] - data['open']
+    volume_change_pct = volume_change / data['prev_volume']
+    
+    if volume_change <= 0:
+        return "Weak Pressure", "#95a5a6"
+    
+    if price_change > 0:
+        if volume_change_pct > 0.5:
+            return "Strong Buying", "#00ff00"
+        return "Buying Pressure", "#2ecc71"
+    elif price_change < 0:
+        if volume_change_pct > 0.5:
+            return "Strong Selling", "#ff0000"
+        return "Selling Pressure", "#e74c3c"
+    else:
+        return "Neutral Accumulation", "#3498db"
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Main dashboard page"""
     data = get_sol_data()
-    color = get_color(data)
+    pressure, color = get_pressure(data) if data else ("No Data", "gray")
     
-    # Safely format the numbers
+    # Formatting
     current_volume = f"{data['current_volume']:,.0f}" if data else "N/A"
     prev_volume = f"{data['prev_volume']:,.0f}" if data else "N/A"
     open_price = f"{data['open']:.4f}" if data else "N/A"
@@ -65,7 +76,7 @@ async def dashboard(request: Request):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>SOLUSDT Volume Dashboard</title>
+        <title>SOLUSDT Pressure Dashboard</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <style>
             body {{
@@ -73,34 +84,59 @@ async def dashboard(request: Request):
                 max-width: 1000px;
                 margin: 0 auto;
                 padding: 20px;
+                background: #f5f5f5;
             }}
             .container {{
-                display: flex;
-                flex-direction: column;
-                gap: 20px;
+                background: white;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }}
             .chart-container {{
                 width: 100%;
                 height: 400px;
+                margin: 20px 0;
             }}
             .controls {{
                 display: flex;
                 gap: 10px;
                 align-items: center;
+                margin-bottom: 15px;
             }}
-            select {{
-                padding: 8px;
-                font-size: 16px;
+            .pressure-indicator {{
+                font-size: 1.2em;
+                padding: 10px;
+                border-radius: 5px;
+                text-align: center;
+                margin: 15px 0;
+                background: #f8f9fa;
+                font-weight: bold;
             }}
-            .info {{
-                display: flex;
-                justify-content: space-between;
+            .info-grid {{
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                margin-top: 15px;
+            }}
+            .info-card {{
                 background: #f8f9fa;
                 padding: 10px;
                 border-radius: 5px;
             }}
+            select, button {{
+                padding: 8px 12px;
+                font-size: 16px;
+                border-radius: 5px;
+                border: 1px solid #ddd;
+            }}
+            button {{
+                background: #3498db;
+                color: white;
+                border: none;
+                cursor: pointer;
+            }}
             .error {{
-                color: red;
+                color: #e74c3c;
                 padding: 10px;
                 background: #ffeeee;
                 border-radius: 5px;
@@ -109,7 +145,7 @@ async def dashboard(request: Request):
     </head>
     <body>
         <div class="container">
-            <h1>SOL/USDT Volume Dashboard</h1>
+            <h1 style="text-align: center;">SOL/USDT Pressure Dashboard</h1>
             
             <div class="controls">
                 <select id="timeframe" onchange="loadData()">
@@ -118,26 +154,33 @@ async def dashboard(request: Request):
                     <option value="5m" selected>5 Minutes</option>
                     <option value="15m">15 Minutes</option>
                 </select>
-                <button onclick="loadData()">Refresh</button>
-                <span id="lastUpdate">{timestamp}</span>
+                <button onclick="loadData()">Refresh Data</button>
+                <span id="lastUpdate">Last: {timestamp}</span>
+            </div>
+            
+            <div class="pressure-indicator" style="color: {color};">
+                {pressure}
             </div>
             
             <div class="chart-container">
                 <canvas id="volumeChart"></canvas>
             </div>
             
-            <div class="info">
-                <div>
-                    <strong>Current Volume:</strong> 
-                    <span id="currentVolume">{current_volume}</span>
+            <div class="info-grid">
+                <div class="info-card">
+                    <strong>Volume</strong>
+                    <div>Current: <span id="currentVolume">{current_volume}</span></div>
+                    <div>Previous: <span id="prevVolume">{prev_volume}</span></div>
                 </div>
-                <div>
-                    <strong>Previous Volume:</strong> 
-                    <span id="prevVolume">{prev_volume}</span>
+                <div class="info-card">
+                    <strong>Price</strong>
+                    <div>Open: <span id="openPrice">{open_price}</span></div>
+                    <div>Close: <span id="closePrice">{close_price}</span></div>
                 </div>
-                <div>
-                    <strong>Price:</strong> 
-                    <span id="price">{open_price} → {close_price}</span>
+                <div class="info-card">
+                    <strong>Change</strong>
+                    <div>Volume: <span id="volumeChange">{round((float(current_volume.replace(',',''))/float(prev_volume.replace(',',''))-1)*100 if data else 0, 2)}%</span></div>
+                    <div>Price: <span id="priceChange">{round((float(close_price)/float(open_price)-1)*100 if data else 0, 2)}%</span></div>
                 </div>
             </div>
             
@@ -150,19 +193,34 @@ async def dashboard(request: Request):
             let chart = new Chart(ctx, {{
                 type: 'bar',
                 data: {{
-                    labels: ['Current Volume'],
+                    labels: ['Volume'],
                     datasets: [{{
                         label: 'SOL Volume',
                         data: [{data['current_volume'] if data else 0}],
-                        backgroundColor: '{color}'
+                        backgroundColor: '{color}',
+                        borderColor: '{color}',
+                        borderWidth: 1
                     }}]
                 }},
                 options: {{
                     responsive: true,
                     maintainAspectRatio: false,
+                    plugins: {{
+                        legend: {{ display: false }},
+                        tooltip: {{
+                            callbacks: {{
+                                label: (context) => {{
+                                    return `Volume: ${context.raw.toLocaleString()}`;
+                                }}
+                            }}
+                        }}
+                    }},
                     scales: {{
                         y: {{
-                            beginAtZero: false
+                            beginAtZero: false,
+                            ticks: {{
+                                callback: (value) => value.toLocaleString()
+                            }}
                         }}
                     }}
                 }}
@@ -185,13 +243,25 @@ async def dashboard(request: Request):
                     // Update chart
                     chart.data.datasets[0].data = [data.current_volume];
                     chart.data.datasets[0].backgroundColor = data.color;
+                    chart.data.datasets[0].borderColor = data.color;
                     chart.update();
                     
                     // Update info
                     document.getElementById('currentVolume').textContent = data.current_volume.toLocaleString();
                     document.getElementById('prevVolume').textContent = data.prev_volume.toLocaleString();
-                    document.getElementById('price').textContent = `${{data.open.toFixed(4)}} → ${{data.close.toFixed(4)}}`;
-                    document.getElementById('lastUpdate').textContent = `Last update: ${{data.timestamp}}`;
+                    document.getElementById('openPrice').textContent = data.open.toFixed(4);
+                    document.getElementById('closePrice').textContent = data.close.toFixed(4);
+                    document.getElementById('volumeChange').textContent = 
+                        `${((data.current_volume/data.prev_volume-1)*100).toFixed(2)}%`;
+                    document.getElementById('priceChange').textContent = 
+                        `${((data.close/data.open-1)*100).toFixed(2)}%`;
+                    document.getElementById('lastUpdate').textContent = `Last: ${data.timestamp}`;
+                    
+                    // Update pressure indicator
+                    const pressureElement = document.querySelector('.pressure-indicator');
+                    pressureElement.textContent = data.pressure;
+                    pressureElement.style.color = data.color;
+                    
                     document.getElementById('error').style.display = 'none';
                 }} catch (e) {{
                     showError("Failed to load data: " + e.message);
@@ -214,9 +284,12 @@ async def get_data(timeframe: str = "5m"):
     data = get_sol_data(timeframe)
     if not data:
         return {"error": "Failed to fetch data from Binance"}
+    
+    pressure, color = get_pressure(data)
     return {
         **data,
-        "color": get_color(data)
+        "pressure": pressure,
+        "color": color
     }
 
 if __name__ == "__main__":

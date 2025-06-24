@@ -1,24 +1,24 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List
 
 app = FastAPI()
 
-# Allow frontend access
+# CORS for frontend to backend communication
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
 templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+async def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 class Candle(BaseModel):
@@ -36,16 +36,16 @@ async def classify(candles: List[Candle]):
             curr = candles[i]
             if curr.volume > prev.volume:
                 if curr.close > curr.open:
-                    color = "darkgreen"  # Bullish
+                    color = "darkgreen"
                 elif curr.close < curr.open:
-                    color = "darkred"    # Bearish
+                    color = "darkred"
                 else:
-                    color = "green"      # Volume up but neutral close
+                    color = "green"
         classified.append({
             "index": i,
-            "open": candles[i].open,
-            "close": candles[i].close,
-            "volume": candles[i].volume,
+            "open": curr.open,
+            "close": curr.close,
+            "volume": curr.volume,
             "color": color
         })
     return {"classified": classified}

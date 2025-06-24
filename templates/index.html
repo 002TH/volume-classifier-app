@@ -1,23 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Volume Classifier for SOLUSDT</title>
+  <title>Volume Classifier</title>
   <style>
     body { font-family: Arial; padding: 20px; }
     table { border-collapse: collapse; width: 100%; }
-    td, th { border: 1px solid #ddd; padding: 8px; text-align: center; }
-    th { background-color: #f2f2f2; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
+    th { background: #f2f2f2; }
   </style>
 </head>
 <body>
-  <h2>Volume Classifier for SOLUSDT</h2>
-  <label for="timeframe">Select Timeframe: </label>
+  <h2>Volume Classifier: SOLUSDT</h2>
   <select id="timeframe">
     <option value="1m">1m</option>
     <option value="3m">3m</option>
     <option value="5m">5m</option>
-    <option value="15m">15m</option>
-    <option value="1h">1h</option>
   </select>
   <button onclick="loadData()">Load</button>
   <table id="resultTable">
@@ -28,43 +25,31 @@
     async function loadData() {
       const tf = document.getElementById("timeframe").value;
       const url = `https://api.binance.com/api/v3/klines?symbol=SOLUSDT&interval=${tf}&limit=20`;
-      
-      try {
-        const raw = await fetch(url).then(r => r.json());
-        const candles = raw.map(k => ({
-          open: parseFloat(k[1]),
-          close: parseFloat(k[4]),
-          volume: parseFloat(k[5])
-        }));
-
-        console.log("Sending candles", candles);
-
-        const result = await fetch("https://volume-classifier-app.onrender.com/classify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(candles)
-        });
-
-        const data = await result.json();
-        console.log("API response", data);
-
-        const table = document.getElementById("resultTable");
-        table.innerHTML = `<tr><th>#</th><th>Open</th><th>Close</th><th>Volume</th><th>Color</th></tr>`;
-        data.classified.forEach(row => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${row.index}</td>
-            <td>${row.open}</td>
-            <td>${row.close}</td>
-            <td>${row.volume}</td>
-            <td style="background:${row.color};color:white">${row.color.toUpperCase()}</td>
-          `;
-          table.appendChild(tr);
-        });
-      } catch (err) {
-        console.error("Error loading or processing data:", err);
-        alert("Something went wrong. Check the console for details.");
-      }
+      const raw = await fetch(url).then(r => r.json());
+      const candles = raw.map(k => ({
+        open: parseFloat(k[1]),
+        close: parseFloat(k[4]),
+        volume: parseFloat(k[5])
+      }));
+      const response = await fetch("https://volume-classifier-app.onrender.com/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(candles)
+      });
+      const data = await response.json();
+      const table = document.getElementById("resultTable");
+      table.innerHTML = `<tr><th>#</th><th>Open</th><th>Close</th><th>Volume</th><th>Color</th></tr>`;
+      data.classified.forEach(row => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${row.index}</td>
+          <td>${row.open}</td>
+          <td>${row.close}</td>
+          <td>${row.volume}</td>
+          <td style="background:${row.color};color:white">${row.color.toUpperCase()}</td>
+        `;
+        table.appendChild(tr);
+      });
     }
   </script>
 </body>

@@ -3,7 +3,6 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from datetime import datetime
 import requests
-import numpy as np
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -11,14 +10,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 BINANCE_API = "https://api.binance.com/api/v3"
 SYMBOL = "SOLUSDT"
 
-# Supported timeframes
-SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]
+SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h"]
 
 def get_klines(interval="5m", limit=50):
     try:
-        # Validate timeframe
         if interval not in SUPPORTED_TIMEFRAMES:
-            interval = "5m"  # Default to 5m if invalid
+            interval = "5m"
         
         response = requests.get(f"{BINANCE_API}/klines", params={
             "symbol": SYMBOL,
@@ -32,45 +29,39 @@ def get_klines(interval="5m", limit=50):
         return None
 
 def calculate_delta(candle):
-    """Calculate buy/sell volume delta using tick rule"""
     close = float(candle[4])
     open_ = float(candle[1])
     volume = float(candle[5])
     
-    if close > open_:  # Bullish candle
+    if close > open_:
         return volume
-    elif close < open_:  # Bearish candle
+    elif close < open_:
         return -volume
-    else:  # Neutral candle
+    else:
         return 0
 
 def analyze_candle(candle, prev_candle):
-    """Analyze a single candle with previous candle context"""
     curr_delta = calculate_delta(candle)
     prev_delta = calculate_delta(prev_candle)
     
-    # Calculate ratio (absolute values)
     abs_curr = abs(curr_delta)
-    abs_prev = abs(prev_delta) if abs(prev_delta) > 0 else 1  # Avoid division by zero
-    
+    abs_prev = abs(prev_delta) if abs(prev_delta) > 0 else 1
     ratio = abs_curr / abs_prev
     
-    # Determine color based on ratio and direction
-    if ratio >= 1.5:  # Strong signal threshold
+    if ratio >= 1.5:
         if curr_delta > 0:
             label = "Strong Buying"
-            color = "#00ff00"  # Green (strong buy)
+            color = "#00ff00"
         elif curr_delta < 0:
             label = "Strong Selling"
-            color = "#ff0000"  # Red (strong sell)
+            color = "#ff0000"
         else:
             label = "Neutral"
-            color = "#95a5a6"  # Gray (neutral)
+            color = "#95a5a6"
     else:
         label = "Neutral"
-        color = "#95a5a6"  # Gray (neutral)
+        color = "#95a5a6"
     
-    # Format time
     ts = datetime.fromtimestamp(candle[0]/1000).strftime('%H:%M:%S')
     
     return {
@@ -94,14 +85,12 @@ def get_historical_data(interval="5m"):
     if not data:
         return None
     
-    # Calculate average volume
     volumes = [float(candle[5]) for candle in data]
     average_volume = sum(volumes) / len(volumes) if volumes else 0
     
     results = []
     for i in range(1, len(data)):
         candle_data = analyze_candle(data[i], data[i-1])
-        # Add spike indicator
         candle_data["is_spike"] = candle_data["volume"] > average_volume
         results.append(candle_data)
     

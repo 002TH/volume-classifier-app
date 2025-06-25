@@ -1,156 +1,189 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from datetime import datetime
 import requests
 
 app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 BINANCE_API = "https://api.binance.com/api/v3"
 
-def get_sol_data(timeframe="1m", limit=2):
+def fetch_candle_data(symbol="SOLUSDT", interval="1m", limit=100):
     try:
-        response = requests.get(
-            f"{BINANCE_API}/klines",
-            params={"symbol": "SOLUSDT", "interval": timeframe, "limit": limit},
-            timeout=5
-        )
-        response.raise_for_status()
-        return response.json()
+        url = f"{BINANCE_API}/klines"
+        params = {"symbol": symbol, "interval": interval, "limit": limit}
+        res = requests.get(url, params=params, timeout=5)
+        res.raise_for_status()
+        data = res.json()
+
+        candles = []
+        for d in data:
+            candles.append({
+                "time": d[0],
+                "open": float(d[1]),
+                "high": float(d[2]),
+                "low": float(d[3]),
+                "close": float(d[4]),
+                "volume": float(d[5])
+            })
+
+        return candles
     except Exception as e:
-        print(f"Error fetching Binance data: {e}")
-        return None
+        print(f"Fetch error: {e}")
+        return []
 
-def classify_pressure(kline):
-    open_price = float(kline[1])
-    close_price = float(kline[4])
-    volume = float(kline[5])
-    timestamp = datetime.fromtimestamp(kline[0] / 1000).strftime('%H:%M:%S')
+def classify_volume(candle, prev_candle):
+    if not candle or not prev_candle:
+        return "No Data", "gray"
 
-    return {
-        "open": open_price,
-        "close": close_price,
-        "volume": volume,
-        "timestamp": timestamp,
-        "color": get_color(open_price, close_price, volume)
-    }
+    curr_vol = candle["volume"]
+    prev_vol = prev_candle["volume"]
+    price_diff = candle["close"] - candle["open"]
+    vol_change = curr_vol - prev_vol
+    vol_change_pct = vol_change / prev_vol if prev_vol else 0
 
-def get_color(open_price, close_price, volume_diff):
-    if volume_diff <= 0:
-        return "gray"
-    if close_price > open_price:
-        return "#006400" if volume_diff > 0 else "#2ecc71"
-    elif close_price < open_price:
-        return "#8B0000" if volume_diff > 0 else "#e74c3c"
-    return "#3498db"
+    if curr_vol <= prev_vol:
+        return "Weak Volume", "#7f8c8d"  # Gray
+
+    if price_diff > 0:
+        if vol_change_pct > 0.5:
+            return "Strong Buying", "#00ff00"
+        return "Buying Pressure", "#2ecc71"
+    elif price_diff < 0:
+        if vol_change_pct > 0.5:
+            return "Strong Selling", "#ff0000"
+        return "Selling Pressure", "#e74c3c"
+    else:
+        return "Neutral", "#3498db"
 
 @app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request):
-    return """
+async def index(request: Request):
+    return HTMLResponse("""
     <!DOCTYPE html>
     <html>
     <head>
-        <title>SOLUSDT Volume Classifier</title>
+        <title>SOLUSDT Volume Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial"></script>
         <style>
-            body { font-family: Arial; background: #f4f4f4; padding: 20px; }
-            .panel { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-            .live { font-size: 18px; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { padding: 8px; text-align: center; }
-            th { background: #333; color: white; }
+            body { font-family: Arial; padding: 20px; background: #f4f4f4; }
+            h1 { text-align: center; }
+            .panel { margin-bottom: 40px; }
+            canvas { background: white; border-radius: 10px; }
+            #metrics { font-weight: bold; text-align: center; margin: 10px; }
         </style>
     </head>
     <body>
-        <div class="panel live" id="livePanel">
-            Loading live data...
-        </div>
+        <h1>SOLUSDT Volume Dashboard</h1>
+
         <div class="panel">
-            <label for="tf">Select timeframe:</label>
-            <select id="tf" onchange="loadHistory()">
+            <h3>🔴 Current Candle (Updates every 3 seconds)</h3>
+            <div id="metrics">Loading...</div>
+            <canvas id="liveChart" height="300"></canvas>
+        </div>
+
+        <div class="panel">
+            <h3>📊 Historical Candles</h3>
+            <select id="intervalSelect" onchange="loadHistory()">
                 <option value="1m">1m</option>
-                <option value="3m" selected>3m</option>
-                <option value="5m">5m</option>
+                <option value="3m">3m</option>
+                <option value="5m" selected>5m</option>
                 <option value="15m">15m</option>
             </select>
-            <div id="historyPanel">Loading history...</div>
+            <canvas id="historyChart" height="300"></canvas>
         </div>
 
         <script>
-            async function loadLive() {
-                try {
-                    const res = await fetch("/live");
-                    const data = await res.json();
-                    document.getElementById("livePanel").innerHTML = `
-                        <strong>Live (${data.timestamp}):</strong><br>
-                        Open: ${data.open} | Close: ${data.close} | Volume: ${data.volume}<br>
-                        <span style="color:${data.color}; font-weight:bold;">${data.pressure}</span>
-                    `;
-                } catch {
-                    document.getElementById("livePanel").innerText = "Error loading live data.";
+            const liveChart = new Chart(document.getElementById("liveChart").getContext("2d"), {
+                type: 'candlestick',
+                data: { datasets: [{ label: "Live", data: [] }] },
+                options: {
+                    scales: {
+                        x: { type: 'time', time: { unit: 'minute' } },
+                        y: { beginAtZero: false }
+                    }
                 }
+            });
+
+            const historyChart = new Chart(document.getElementById("historyChart").getContext("2d"), {
+                type: 'candlestick',
+                data: { datasets: [{ label: "History", data: [] }] },
+                options: {
+                    scales: {
+                        x: { type: 'time', time: { unit: 'minute' } },
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+
+            async function updateLive() {
+                const res = await fetch('/live');
+                const data = await res.json();
+
+                liveChart.data.datasets[0].data = [data.candle];
+                liveChart.update();
+
+                document.getElementById("metrics").innerHTML = `
+                    Time: ${data.timestamp}<br>
+                    Open: ${data.candle.o} | High: ${data.candle.h}<br>
+                    Low: ${data.candle.l} | Close: ${data.candle.c}<br>
+                    Volume: ${data.volume.toLocaleString()}<br>
+                    Signal: <span style="color:${data.color}">${data.signal}</span>
+                `;
             }
 
             async function loadHistory() {
-                const tf = document.getElementById("tf").value;
-                const res = await fetch(`/history?timeframe=${tf}`);
-                const history = await res.json();
-                let html = "<table><tr><th>Time</th><th>Open</th><th>Close</th><th>Volume</th><th>Pressure</th></tr>";
-                for (let row of history) {
-                    html += `<tr style="color:${row.color};">
-                        <td>${row.timestamp}</td>
-                        <td>${row.open}</td>
-                        <td>${row.close}</td>
-                        <td>${row.volume}</td>
-                        <td>${row.pressure}</td>
-                    </tr>`;
-                }
-                html += "</table>";
-                document.getElementById("historyPanel").innerHTML = html;
+                const interval = document.getElementById("intervalSelect").value;
+                const res = await fetch(`/history?interval=${interval}`);
+                const data = await res.json();
+
+                historyChart.data.datasets[0].data = data;
+                historyChart.update();
             }
 
-            loadLive();
+            setInterval(updateLive, 3000);
+            updateLive();
             loadHistory();
-            setInterval(loadLive, 3000);
         </script>
     </body>
     </html>
-    """
+    """)
 
 @app.get("/live")
 async def live_data():
-    klines = get_sol_data("1m", 2)
-    if not klines or len(klines) < 2:
-        return JSONResponse({"error": "No data"}, status_code=500)
+    candles = fetch_candle_data(interval="1m", limit=2)
+    if len(candles) < 2:
+        return JSONResponse({"error": "Insufficient data"}, status_code=500)
 
-    prev_vol = float(klines[-2][5])
-    curr = classify_pressure(klines[-1])
-    volume_diff = curr["volume"] - prev_vol
+    current = candles[-1]
+    previous = candles[-2]
+    signal, color = classify_volume(current, previous)
 
-    curr["pressure"] = (
-        "Strong Buying" if volume_diff > 0 and curr["close"] > curr["open"] else
-        "Strong Selling" if volume_diff > 0 and curr["close"] < curr["open"] else
-        "Neutral" if volume_diff > 0 else "Weak"
-    )
-    return curr
+    return {
+        "timestamp": datetime.fromtimestamp(current["time"] / 1000).strftime("%H:%M:%S"),
+        "candle": {
+            "x": current["time"],
+            "o": current["open"],
+            "h": current["high"],
+            "l": current["low"],
+            "c": current["close"]
+        },
+        "volume": current["volume"],
+        "signal": signal,
+        "color": color
+    }
 
 @app.get("/history")
-async def historical_data(timeframe: str = "3m"):
-    klines = get_sol_data(timeframe, 20)
-    if not klines:
-        return []
-
-    history = []
-    for i in range(1, len(klines)):
-        prev = float(klines[i - 1][5])
-        curr = classify_pressure(klines[i])
-        diff = curr["volume"] - prev
-        pressure = (
-            "Strong Buying" if diff > 0 and curr["close"] > curr["open"] else
-            "Strong Selling" if diff > 0 and curr["close"] < curr["open"] else
-            "Neutral" if diff > 0 else "Weak"
-        )
-        curr["pressure"] = pressure
-        history.append(curr)
-    return history
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000)
+async def history_data(interval: str = "5m"):
+    candles = fetch_candle_data(interval=interval, limit=100)
+    formatted = [{
+        "x": c["time"],
+        "o": c["open"],
+        "h": c["high"],
+        "l": c["low"],
+        "c": c["close"]
+    } for c in candles]
+    return formatted

@@ -22,7 +22,7 @@
 
         <h2>🔽 Historical Volume Pressure</h2>
         <label>Select Timeframe:</label>
-        <select id="timeframe" onchange="loadHistory()">
+        <select id="timeframe" onchange="changeTimeframe()">
             <option value="1m">1 Minute</option>
             <option value="3m">3 Minute</option>
             <option value="5m" selected>5 Minute</option>
@@ -34,6 +34,8 @@
     <script>
         const topCtx = document.getElementById('topChart').getContext('2d');
         const bottomCtx = document.getElementById('bottomChart').getContext('2d');
+        let historyInterval;
+        let currentTimeframe = '5m'; // Default timeframe
 
         let topChart = new Chart(topCtx, {
             type: 'bar',
@@ -51,39 +53,85 @@
         let bottomChart = new Chart(bottomCtx, {
             type: 'bar',
             data: { labels: [], datasets: [{ label: 'Volume', data: [], backgroundColor: [] }] },
-            options: { responsive: true }
+            options: { 
+                responsive: true,
+                scales: {
+                    x: {
+                        ticks: {
+                            autoSkip: true,
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                }
+            }
         });
 
+        function changeTimeframe() {
+            currentTimeframe = document.getElementById('timeframe').value;
+            // Clear the previous interval and set a new one
+            clearInterval(historyInterval);
+            startHistoryUpdates();
+        }
+
+        function startHistoryUpdates() {
+            // Load immediately
+            loadHistory();
+            // Then set up the interval
+            // Update interval based on timeframe (shorter timeframes update more frequently)
+            const intervalTime = getUpdateInterval(currentTimeframe);
+            historyInterval = setInterval(loadHistory, intervalTime);
+        }
+
+        function getUpdateInterval(timeframe) {
+            // Set different update intervals based on the timeframe
+            switch(timeframe) {
+                case '1m': return 30000; // 30 seconds for 1m
+                case '3m': return 60000; // 1 minute for 3m
+                case '5m': return 90000; // 1.5 minutes for 5m
+                case '15m': return 180000; // 3 minutes for 15m
+                default: return 60000; // default 1 minute
+            }
+        }
+
         async function updateTop() {
-            const res = await fetch('/realtime?timeframe=' + document.getElementById('timeframe').value);
-            const data = await res.json();
-            document.getElementById('label').textContent = data.label;
-            document.getElementById('volume').textContent = data.volume.toLocaleString();
-            document.getElementById('open').textContent = data.open;
-            document.getElementById('close').textContent = data.close;
-            document.getElementById('time').textContent = data.time;
-            topChart.data.datasets[0].data = [data.volume];
-            topChart.data.datasets[0].backgroundColor = data.color;
-            topChart.update();
+            try {
+                const res = await fetch('/realtime?timeframe=' + currentTimeframe);
+                const data = await res.json();
+                document.getElementById('label').textContent = data.label;
+                document.getElementById('volume').textContent = data.volume.toLocaleString();
+                document.getElementById('open').textContent = data.open;
+                document.getElementById('close').textContent = data.close;
+                document.getElementById('time').textContent = data.time;
+                topChart.data.datasets[0].data = [data.volume];
+                topChart.data.datasets[0].backgroundColor = data.color;
+                topChart.update();
+            } catch (error) {
+                console.error('Error updating top chart:', error);
+            }
         }
 
         async function loadHistory() {
-            const tf = document.getElementById('timeframe').value;
-            const res = await fetch('/historical?timeframe=' + tf);
-            const history = await res.json();
-            const labels = history.map(h => h.time);
-            const volumes = history.map(h => h.volume);
-            const colors = history.map(h => h.color);
-            bottomChart.data.labels = labels;
-            bottomChart.data.datasets[0].data = volumes;
-            bottomChart.data.datasets[0].backgroundColor = colors;
-            bottomChart.update();
+            try {
+                const res = await fetch('/historical?timeframe=' + currentTimeframe);
+                const history = await res.json();
+                const labels = history.map(h => h.time);
+                const volumes = history.map(h => h.volume);
+                const colors = history.map(h => h.color);
+                bottomChart.data.labels = labels;
+                bottomChart.data.datasets[0].data = volumes;
+                bottomChart.data.datasets[0].backgroundColor = colors;
+                bottomChart.update();
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
         }
 
-        setInterval(updateTop, 3000);
+        // Start all updates when page loads
         window.onload = () => {
             updateTop();
-            loadHistory();
+            startHistoryUpdates();
+            setInterval(updateTop, 3000); // Real-time updates every 3 seconds
         };
     </script>
 </body>

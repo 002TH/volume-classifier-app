@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SOLUSDT Volume Dashboard</title>
+    <title>SOLUSDT Delta-Volume Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.0.2"></script>
     <style>
         :root {
             --bg-color: #f4f4f4;
             --container-bg: white;
             --text-color: #333;
             --hr-color: #ddd;
+            --bullish-color: #26a69a;
+            --bearish-color: #ef5350;
+            --neutral-color: #78909c;
         }
         
         .dark-mode {
@@ -16,6 +20,9 @@
             --container-bg: #1e1e1e;
             --text-color: #f0f0f0;
             --hr-color: #444;
+            --bullish-color: #00c853;
+            --bearish-color: #ff3d00;
+            --neutral-color: #78909c;
         }
         
         body {
@@ -31,15 +38,28 @@
             padding: 20px;
             border-radius: 10px;
             transition: background 0.3s;
+            margin-bottom: 20px;
         }
         
-        canvas { margin-top: 20px; }
-        select { 
-            padding: 8px; 
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        canvas { 
+            margin-top: 20px;
+            width: 100% !important;
+            height: 300px !important;
+        }
+        
+        select, button {
+            padding: 8px 12px;
             margin-right: 10px;
             background: var(--container-bg);
             color: var(--text-color);
             border: 1px solid var(--hr-color);
+            border-radius: 4px;
         }
         
         hr { border-color: var(--hr-color); }
@@ -49,15 +69,33 @@
             top: 20px;
             right: 20px;
             background: var(--container-bg);
-            border: none;
+            border: 1px solid var(--hr-color);
             padding: 8px 12px;
-            border-radius: 5px;
+            border-radius: 4px;
             cursor: pointer;
             color: var(--text-color);
             display: flex;
             align-items: center;
             gap: 8px;
         }
+        
+        .metric-card {
+            background: var(--container-bg);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+        
+        .bullish { color: var(--bullish-color); }
+        .bearish { color: var(--bearish-color); }
+        .neutral { color: var(--neutral-color); }
     </style>
 </head>
 <body>
@@ -67,49 +105,65 @@
     </button>
     
     <div class="container">
-        <h2>🔼 Real-Time Volume Pressure</h2>
-        <div><strong>Status:</strong> <span id="label"></span></div>
-        <div><strong>Open:</strong> <span id="open"></span> | <strong>Close:</strong> <span id="close"></span></div>
-        <div><strong>Volume:</strong> <span id="volume"></span> | <strong>Time:</strong> <span id="time"></span></div>
-        <canvas id="topChart" height="150"></canvas>
-
-        <hr>
-
-        <h2>🔽 Historical Volume Pressure</h2>
-        <label>Select Timeframe:</label>
+        <h2>SOLUSDT Delta-Volume Indicator</h2>
+        <label>Timeframe:</label>
         <select id="timeframe" onchange="changeTimeframe()">
             <option value="1m">1 Minute</option>
             <option value="3m">3 Minute</option>
             <option value="5m" selected>5 Minute</option>
             <option value="15m">15 Minute</option>
         </select>
-        <canvas id="bottomChart" height="200"></canvas>
+        
+        <div class="grid">
+            <div class="metric-card">
+                <div>Current Delta</div>
+                <div class="metric-value" id="current-delta">0</div>
+                <div id="delta-direction">Neutral</div>
+            </div>
+            
+            <div class="metric-card">
+                <div>Strength Score</div>
+                <div class="metric-value" id="strength-score">0</div>
+                <div id="strength-label">Neutral</div>
+            </div>
+        </div>
+        
+        <div class="metric-card">
+            <div>Volume Analysis</div>
+            <div>Buy Volume: <span id="buy-volume">0</span></div>
+            <div>Sell Volume: <span id="sell-volume">0</span></div>
+            <div>Total Volume: <span id="total-volume">0</span></div>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h3>Real-Time Delta/Volume</h3>
+        <canvas id="realtimeChart"></canvas>
+    </div>
+    
+    <div class="container">
+        <h3>Historical Analysis</h3>
+        <canvas id="historicalChart"></canvas>
     </div>
 
     <script>
-        // Theme management
+        // Theme management (same as before)
         function applyTheme(isDark) {
             if (isDark) {
                 document.body.classList.add('dark-mode');
                 document.getElementById('theme-icon').textContent = '☀️';
                 document.getElementById('theme-text').textContent = 'Light Mode';
-                
-                // Update charts for dark mode
                 Chart.defaults.color = '#f0f0f0';
                 Chart.defaults.borderColor = '#444';
             } else {
                 document.body.classList.remove('dark-mode');
                 document.getElementById('theme-icon').textContent = '🌙';
                 document.getElementById('theme-text').textContent = 'Dark Mode';
-                
-                // Update charts for light mode
                 Chart.defaults.color = '#666';
                 Chart.defaults.borderColor = 'rgba(0, 0, 0, 0.1)';
             }
-            
-            // Re-render charts with new theme
-            if (topChart) topChart.update();
-            if (bottomChart) bottomChart.update();
+            if (realtimeChart) realtimeChart.update();
+            if (historicalChart) historicalChart.update();
         }
 
         function toggleTheme() {
@@ -118,86 +172,169 @@
             localStorage.setItem('darkMode', isDark);
         }
 
-        // Initialize theme from localStorage or prefer-color-scheme
         function initTheme() {
             const savedTheme = localStorage.getItem('darkMode');
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedTheme !== null) applyTheme(savedTheme === 'true');
+            else if (prefersDark) applyTheme(true);
+        }
+
+        // Chart initialization
+        const realtimeCtx = document.getElementById('realtimeChart').getContext('2d');
+        const historicalCtx = document.getElementById('historicalChart').getContext('2d');
+        let currentTimeframe = '5m';
+        let historyInterval;
+        
+        // Real-time chart (combined delta/volume)
+        let realtimeChart = new Chart(realtimeCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Delta', 'Volume'],
+                datasets: [
+                    {
+                        label: 'Buy Volume',
+                        data: [0, 0],
+                        backgroundColor: getComputedStyle(document.documentElement)
+                            .getPropertyValue('--bullish-color'),
+                        borderColor: 'transparent',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Sell Volume',
+                        data: [0, 0],
+                        backgroundColor: getComputedStyle(document.documentElement)
+                            .getPropertyValue('--bearish-color'),
+                        borderColor: 'transparent',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: { stacked: true },
+                    y: { stacked: false }
+                },
+                plugins: {
+                    tooltip: { mode: 'index' },
+                    annotation: {
+                        annotations: {
+                            zeroLine: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: 0,
+                                borderColor: 'rgb(150, 150, 150)',
+                                borderWidth: 1
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Historical chart (strength over time)
+        let historicalChart = new Chart(historicalCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Strength Score',
+                        data: [],
+                        borderColor: getComputedStyle(document.documentElement)
+                            .getPropertyValue('--bullish-color'),
+                        backgroundColor: 'transparent',
+                        tension: 0.1,
+                        fill: false
+                    },
+                    {
+                        label: 'Delta',
+                        data: [],
+                        borderColor: getComputedStyle(document.documentElement)
+                            .getPropertyValue('--bearish-color'),
+                        backgroundColor: 'transparent',
+                        tension: 0.1,
+                        fill: false,
+                        hidden: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                interaction: { mode: 'index' },
+                scales: {
+                    y: {
+                        min: -100,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        // Update UI with new data
+        function updateMetrics(data) {
+            // Update metric cards
+            document.getElementById('current-delta').textContent = data.delta.toFixed(2);
+            document.getElementById('strength-score').textContent = data.strength_score.toFixed(0);
+            document.getElementById('buy-volume').textContent = data.buy_volume.toFixed(2);
+            document.getElementById('sell-volume').textContent = data.sell_volume.toFixed(2);
+            document.getElementById('total-volume').textContent = data.volume.toFixed(2);
             
-            if (savedTheme !== null) {
-                applyTheme(savedTheme === 'true');
-            } else if (prefersDark) {
-                applyTheme(true);
+            // Set direction classes
+            const deltaEl = document.getElementById('delta-direction');
+            const strengthEl = document.getElementById('strength-label');
+            
+            deltaEl.className = data.delta > 0 ? 'bullish' : data.delta < 0 ? 'bearish' : 'neutral';
+            deltaEl.textContent = data.delta > 0 ? 'Bullish' : data.delta < 0 ? 'Bearish' : 'Neutral';
+            
+            strengthEl.className = data.strength_score > 0 ? 'bullish' : data.strength_score < 0 ? 'bearish' : 'neutral';
+            strengthEl.textContent = 
+                Math.abs(data.strength_score) > 75 ? 'Very Strong' :
+                Math.abs(data.strength_score) > 50 ? 'Strong' :
+                Math.abs(data.strength_score) > 25 ? 'Moderate' : 'Weak';
+            
+            // Update realtime chart
+            realtimeChart.data.datasets[0].data = [Math.max(0, data.delta), data.buy_volume];
+            realtimeChart.data.datasets[1].data = [Math.min(0, data.delta), data.sell_volume];
+            realtimeChart.update();
+        }
+
+        // Data fetching functions
+        async function fetchRealtime() {
+            try {
+                const res = await fetch('/realtime?timeframe=' + currentTimeframe);
+                const data = await res.json();
+                updateMetrics(data);
+            } catch (error) {
+                console.error('Error fetching realtime data:', error);
             }
         }
 
-        // Chart initialization and other existing code...
-        const topCtx = document.getElementById('topChart').getContext('2d');
-        const bottomCtx = document.getElementById('bottomChart').getContext('2d');
-        let historyInterval;
-        let currentTimeframe = '5m'; // Default timeframe
-
-        let topChart = new Chart(topCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Current'],
-                datasets: [{
-                    label: 'Volume',
-                    data: [0],
-                    backgroundColor: '#ccc'
-                }]
-            },
-            options: { 
-                responsive: true,
-                scales: {
-                    y: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        }
-                    },
-                    x: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        }
-                    }
-                }
+        async function fetchHistorical() {
+            try {
+                const res = await fetch('/historical?timeframe=' + currentTimeframe);
+                const data = await res.json();
+                
+                historicalChart.data.labels = data.map(d => d.time);
+                historicalChart.data.datasets[0].data = data.map(d => d.strength_score);
+                historicalChart.data.datasets[1].data = data.map(d => d.delta);
+                historicalChart.update();
+            } catch (error) {
+                console.error('Error fetching historical data:', error);
             }
-        });
-
-        let bottomChart = new Chart(bottomCtx, {
-            type: 'bar',
-            data: { labels: [], datasets: [{ label: 'Volume', data: [], backgroundColor: [] }] },
-            options: { 
-                responsive: true,
-                scales: {
-                    x: {
-                        ticks: {
-                            autoSkip: true,
-                            maxRotation: 45,
-                            minRotation: 45
-                        },
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        }
-                    }
-                }
-            }
-        });
+        }
 
         function changeTimeframe() {
             currentTimeframe = document.getElementById('timeframe').value;
             clearInterval(historyInterval);
-            startHistoryUpdates();
+            startUpdates();
         }
 
-        function startHistoryUpdates() {
-            loadHistory();
-            const intervalTime = getUpdateInterval(currentTimeframe);
-            historyInterval = setInterval(loadHistory, intervalTime);
+        function startUpdates() {
+            fetchRealtime();
+            fetchHistorical();
+            const interval = getUpdateInterval(currentTimeframe);
+            historyInterval = setInterval(fetchHistorical, interval);
         }
 
         function getUpdateInterval(timeframe) {
@@ -210,45 +347,11 @@
             }
         }
 
-        async function updateTop() {
-            try {
-                const res = await fetch('/realtime?timeframe=' + currentTimeframe);
-                const data = await res.json();
-                document.getElementById('label').textContent = data.label;
-                document.getElementById('volume').textContent = data.volume.toLocaleString();
-                document.getElementById('open').textContent = data.open;
-                document.getElementById('close').textContent = data.close;
-                document.getElementById('time').textContent = data.time;
-                topChart.data.datasets[0].data = [data.volume];
-                topChart.data.datasets[0].backgroundColor = data.color;
-                topChart.update();
-            } catch (error) {
-                console.error('Error updating top chart:', error);
-            }
-        }
-
-        async function loadHistory() {
-            try {
-                const res = await fetch('/historical?timeframe=' + currentTimeframe);
-                const history = await res.json();
-                const labels = history.map(h => h.time);
-                const volumes = history.map(h => h.volume);
-                const colors = history.map(h => h.color);
-                bottomChart.data.labels = labels;
-                bottomChart.data.datasets[0].data = volumes;
-                bottomChart.data.datasets[0].backgroundColor = colors;
-                bottomChart.update();
-            } catch (error) {
-                console.error('Error loading history:', error);
-            }
-        }
-
-        // Initialize everything when page loads
+        // Initialize
         window.onload = () => {
             initTheme();
-            updateTop();
-            startHistoryUpdates();
-            setInterval(updateTop, 3000);
+            startUpdates();
+            setInterval(fetchRealtime, 3000);
         };
     </script>
 </body>

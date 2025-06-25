@@ -4,13 +4,68 @@
     <title>SOLUSDT Volume Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
-        .container { background: white; padding: 20px; border-radius: 10px; }
+        :root {
+            --bg-color: #f4f4f4;
+            --container-bg: white;
+            --text-color: #333;
+            --hr-color: #ddd;
+        }
+        
+        .dark-mode {
+            --bg-color: #121212;
+            --container-bg: #1e1e1e;
+            --text-color: #f0f0f0;
+            --hr-color: #444;
+        }
+        
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            transition: background 0.3s, color 0.3s;
+        }
+        
+        .container {
+            background: var(--container-bg);
+            padding: 20px;
+            border-radius: 10px;
+            transition: background 0.3s;
+        }
+        
         canvas { margin-top: 20px; }
-        select { padding: 8px; margin-right: 10px; }
+        select { 
+            padding: 8px; 
+            margin-right: 10px;
+            background: var(--container-bg);
+            color: var(--text-color);
+            border: 1px solid var(--hr-color);
+        }
+        
+        hr { border-color: var(--hr-color); }
+        
+        .theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: var(--container-bg);
+            border: none;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
     </style>
 </head>
 <body>
+    <button class="theme-toggle" onclick="toggleTheme()">
+        <span id="theme-icon">🌙</span>
+        <span id="theme-text">Dark Mode</span>
+    </button>
+    
     <div class="container">
         <h2>🔼 Real-Time Volume Pressure</h2>
         <div><strong>Status:</strong> <span id="label"></span></div>
@@ -32,6 +87,50 @@
     </div>
 
     <script>
+        // Theme management
+        function applyTheme(isDark) {
+            if (isDark) {
+                document.body.classList.add('dark-mode');
+                document.getElementById('theme-icon').textContent = '☀️';
+                document.getElementById('theme-text').textContent = 'Light Mode';
+                
+                // Update charts for dark mode
+                Chart.defaults.color = '#f0f0f0';
+                Chart.defaults.borderColor = '#444';
+            } else {
+                document.body.classList.remove('dark-mode');
+                document.getElementById('theme-icon').textContent = '🌙';
+                document.getElementById('theme-text').textContent = 'Dark Mode';
+                
+                // Update charts for light mode
+                Chart.defaults.color = '#666';
+                Chart.defaults.borderColor = 'rgba(0, 0, 0, 0.1)';
+            }
+            
+            // Re-render charts with new theme
+            if (topChart) topChart.update();
+            if (bottomChart) bottomChart.update();
+        }
+
+        function toggleTheme() {
+            const isDark = !document.body.classList.contains('dark-mode');
+            applyTheme(isDark);
+            localStorage.setItem('darkMode', isDark);
+        }
+
+        // Initialize theme from localStorage or prefer-color-scheme
+        function initTheme() {
+            const savedTheme = localStorage.getItem('darkMode');
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            
+            if (savedTheme !== null) {
+                applyTheme(savedTheme === 'true');
+            } else if (prefersDark) {
+                applyTheme(true);
+            }
+        }
+
+        // Chart initialization and other existing code...
         const topCtx = document.getElementById('topChart').getContext('2d');
         const bottomCtx = document.getElementById('bottomChart').getContext('2d');
         let historyInterval;
@@ -47,7 +146,21 @@
                     backgroundColor: '#ccc'
                 }]
             },
-            options: { responsive: true }
+            options: { 
+                responsive: true,
+                scales: {
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    }
+                }
+            }
         });
 
         let bottomChart = new Chart(bottomCtx, {
@@ -61,6 +174,14 @@
                             autoSkip: true,
                             maxRotation: 45,
                             minRotation: 45
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
                         }
                     }
                 }
@@ -69,28 +190,23 @@
 
         function changeTimeframe() {
             currentTimeframe = document.getElementById('timeframe').value;
-            // Clear the previous interval and set a new one
             clearInterval(historyInterval);
             startHistoryUpdates();
         }
 
         function startHistoryUpdates() {
-            // Load immediately
             loadHistory();
-            // Then set up the interval
-            // Update interval based on timeframe (shorter timeframes update more frequently)
             const intervalTime = getUpdateInterval(currentTimeframe);
             historyInterval = setInterval(loadHistory, intervalTime);
         }
 
         function getUpdateInterval(timeframe) {
-            // Set different update intervals based on the timeframe
             switch(timeframe) {
-                case '1m': return 30000; // 30 seconds for 1m
-                case '3m': return 60000; // 1 minute for 3m
-                case '5m': return 90000; // 1.5 minutes for 5m
-                case '15m': return 180000; // 3 minutes for 15m
-                default: return 60000; // default 1 minute
+                case '1m': return 30000;
+                case '3m': return 60000;
+                case '5m': return 90000;
+                case '15m': return 180000;
+                default: return 60000;
             }
         }
 
@@ -127,11 +243,12 @@
             }
         }
 
-        // Start all updates when page loads
+        // Initialize everything when page loads
         window.onload = () => {
+            initTheme();
             updateTop();
             startHistoryUpdates();
-            setInterval(updateTop, 3000); // Real-time updates every 3 seconds
+            setInterval(updateTop, 3000);
         };
     </script>
 </body>

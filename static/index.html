@@ -1,308 +1,113 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SOLUSDT Volume Dashboard</title>
+    <title>SOLUSDT Delta Pressure Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --bg-color: #f4f4f4;
-            --container-bg: white;
-            --text-color: #333;
-            --hr-color: #ddd;
-            --bullish-color: #26a69a;
-            --bearish-color: #ef5350;
-            --neutral-color: #78909c;
-        }
-        
-        .dark-mode {
-            --bg-color: #121212;
-            --container-bg: #1e1e1e;
-            --text-color: #f0f0f0;
-            --hr-color: #444;
-            --bullish-color: #00c853;
-            --bearish-color: #ff3d00;
-            --neutral-color: #78909c;
-        }
-        
-        body {
-            font-family: sans-serif;
-            padding: 20px;
-            background: var(--bg-color);
-            color: var(--text-color);
-            transition: all 0.3s;
-        }
-        
-        .container {
-            background: var(--container-bg);
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        
-        canvas {
-            width: 100% !important;
-            height: 300px !important;
-            margin-top: 20px;
-        }
-        
-        select, button {
-            padding: 8px 12px;
-            margin-right: 10px;
-            background: var(--container-bg);
-            color: var(--text-color);
-            border: 1px solid var(--hr-color);
-            border-radius: 4px;
-        }
-        
-        .theme-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: var(--container-bg);
-            border: 1px solid var(--hr-color);
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .metric-card {
-            background: var(--container-bg);
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .metric-value {
-            font-size: 24px;
-            font-weight: bold;
-            margin-top: 5px;
-        }
-        
-        .bullish { color: var(--bullish-color); }
-        .bearish { color: var(--bearish-color); }
-        .neutral { color: var(--neutral-color); }
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+        .container { background: white; padding: 20px; border-radius: 10px; }
+        canvas { margin-top: 20px; }
+        select { padding: 8px; margin-right: 10px; }
+        .delta-positive { color: #2ecc71; }
+        .delta-negative { color: #e74c3c; }
+        .delta-neutral { color: #3498db; }
     </style>
 </head>
 <body>
-    <button class="theme-toggle" onclick="toggleTheme()">
-        <span id="theme-icon">🌙</span>
-        <span id="theme-text">Dark Mode</span>
-    </button>
-    
     <div class="container">
-        <h2>SOLUSDT Delta-Volume Indicator</h2>
-        <label>Timeframe:</label>
-        <select id="timeframe" onchange="changeTimeframe()">
+        <h2>🔼 Real-Time Delta Pressure</h2>
+        <div><strong>Status:</strong> <span id="label"></span></div>
+        <div><strong>Delta:</strong> <span id="delta"></span></div>
+        <div><strong>Open:</strong> <span id="open"></span> | <strong>Close:</strong> <span id="close"></span></div>
+        <div><strong>Volume:</strong> <span id="volume"></span> | <strong>Time:</strong> <span id="time"></span></div>
+        <canvas id="topChart" height="150"></canvas>
+
+        <hr>
+
+        <h2>🔽 Historical Delta Pressure</h2>
+        <label>Select Timeframe:</label>
+        <select id="timeframe" onchange="loadHistory()">
             <option value="1m">1 Minute</option>
             <option value="3m">3 Minute</option>
             <option value="5m" selected>5 Minute</option>
             <option value="15m">15 Minute</option>
         </select>
-        
-        <div class="grid">
-            <div class="metric-card">
-                <div>Current Delta</div>
-                <div class="metric-value" id="current-delta">0</div>
-                <div id="delta-direction">Neutral</div>
-            </div>
-            
-            <div class="metric-card">
-                <div>Strength Score</div>
-                <div class="metric-value" id="strength-score">0</div>
-                <div id="strength-label">Neutral</div>
-            </div>
-        </div>
-        
-        <div class="metric-card">
-            <div>Volume Analysis</div>
-            <div>Buy Volume: <span id="buy-volume">0</span></div>
-            <div>Sell Volume: <span id="sell-volume">0</span></div>
-            <div>Total Volume: <span id="total-volume">0</span></div>
-        </div>
-    </div>
-    
-    <div class="container">
-        <h3>Real-Time Delta/Volume</h3>
-        <canvas id="realtimeChart"></canvas>
-    </div>
-    
-    <div class="container">
-        <h3>Historical Analysis</h3>
-        <canvas id="historicalChart"></canvas>
+        <canvas id="bottomChart" height="200"></canvas>
     </div>
 
     <script>
-        // Theme management
-        function applyTheme(isDark) {
-            if (isDark) {
-                document.body.classList.add('dark-mode');
-                document.getElementById('theme-icon').textContent = '☀️';
-                document.getElementById('theme-text').textContent = 'Light Mode';
-                Chart.defaults.color = '#f0f0f0';
-                Chart.defaults.borderColor = '#444';
-            } else {
-                document.body.classList.remove('dark-mode');
-                document.getElementById('theme-icon').textContent = '🌙';
-                document.getElementById('theme-text').textContent = 'Dark Mode';
-                Chart.defaults.color = '#666';
-                Chart.defaults.borderColor = 'rgba(0, 0, 0, 0.1)';
-            }
-            if (realtimeChart) realtimeChart.update();
-            if (historicalChart) historicalChart.update();
-        }
+        const topCtx = document.getElementById('topChart').getContext('2d');
+        const bottomCtx = document.getElementById('bottomChart').getContext('2d');
 
-        function toggleTheme() {
-            const isDark = !document.body.classList.contains('dark-mode');
-            applyTheme(isDark);
-            localStorage.setItem('darkMode', isDark);
-        }
-
-        function initTheme() {
-            const savedTheme = localStorage.getItem('darkMode');
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (savedTheme !== null) applyTheme(savedTheme === 'true');
-            else if (prefersDark) applyTheme(true);
-        }
-
-        // Chart initialization
-        const realtimeCtx = document.getElementById('realtimeChart').getContext('2d');
-        const historicalCtx = document.getElementById('historicalChart').getContext('2d');
-        let currentTimeframe = '5m';
-        let historyInterval;
-        
-        let realtimeChart = new Chart(realtimeCtx, {
+        let topChart = new Chart(topCtx, {
             type: 'bar',
             data: {
-                labels: ['Delta', 'Volume'],
-                datasets: [
-                    {
-                        label: 'Buy Volume',
-                        data: [0, 0],
-                        backgroundColor: getComputedStyle(document.documentElement)
-                            .getPropertyValue('--bullish-color'),
-                        borderColor: 'transparent'
-                    },
-                    {
-                        label: 'Sell Volume',
-                        data: [0, 0],
-                        backgroundColor: getComputedStyle(document.documentElement)
-                            .getPropertyValue('--bearish-color'),
-                        borderColor: 'transparent'
-                    }
-                ]
+                labels: ['Current'],
+                datasets: [{
+                    label: 'Delta Pressure',
+                    data: [0],
+                    backgroundColor: '#ccc'
+                }]
             },
-            options: {
-                responsive: true,
-                scales: { x: { stacked: true }, y: { stacked: false } }
-            }
+            options: { responsive: true }
         });
 
-        let historicalChart = new Chart(historicalCtx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    {
-                        label: 'Strength Score',
-                        data: [],
-                        borderColor: getComputedStyle(document.documentElement)
-                            .getPropertyValue('--bullish-color'),
-                        backgroundColor: 'transparent',
-                        tension: 0.1
-                    }
-                ]
+        let bottomChart = new Chart(bottomCtx, {
+            type: 'bar',
+            data: { 
+                labels: [], 
+                datasets: [{ 
+                    label: 'Delta Pressure', 
+                    data: [], 
+                    backgroundColor: [] 
+                }] 
             },
-            options: {
-                responsive: true,
-                scales: { y: { min: -100, max: 100 } }
-            }
+            options: { responsive: true }
         });
 
-        function updateMetrics(data) {
-            document.getElementById('current-delta').textContent = data.delta.toFixed(2);
-            document.getElementById('strength-score').textContent = data.strength_score.toFixed(0);
-            document.getElementById('buy-volume').textContent = data.buy_volume.toFixed(2);
-            document.getElementById('sell-volume').textContent = data.sell_volume.toFixed(2);
-            document.getElementById('total-volume').textContent = data.volume.toFixed(2);
+        function updateDeltaClass(value) {
+            const deltaEl = document.getElementById('delta');
+            deltaEl.className = value > 0 ? 'delta-positive' : 
+                               value < 0 ? 'delta-negative' : 'delta-neutral';
+        }
+
+        async function updateTop() {
+            const res = await fetch('/realtime?timeframe=' + document.getElementById('timeframe').value);
+            const data = await res.json();
             
-            const deltaEl = document.getElementById('delta-direction');
-            const strengthEl = document.getElementById('strength-label');
+            document.getElementById('label').textContent = data.label;
+            document.getElementById('delta').textContent = data.delta.toFixed(2);
+            document.getElementById('volume').textContent = data.volume.toLocaleString();
+            document.getElementById('open').textContent = data.open;
+            document.getElementById('close').textContent = data.close;
+            document.getElementById('time').textContent = data.time;
             
-            deltaEl.className = data.delta > 0 ? 'bullish' : data.delta < 0 ? 'bearish' : 'neutral';
-            deltaEl.textContent = data.delta > 0 ? 'Bullish' : data.delta < 0 ? 'Bearish' : 'Neutral';
+            updateDeltaClass(data.delta);
             
-            strengthEl.className = data.strength_score > 0 ? 'bullish' : data.strength_score < 0 ? 'bearish' : 'neutral';
-            strengthEl.textContent = 
-                Math.abs(data.strength_score) > 75 ? 'Very Strong' :
-                Math.abs(data.strength_score) > 50 ? 'Strong' :
-                Math.abs(data.strength_score) > 25 ? 'Moderate' : 'Weak';
+            topChart.data.datasets[0].data = [data.delta];
+            topChart.data.datasets[0].backgroundColor = data.color;
+            topChart.update();
+        }
+
+        async function loadHistory() {
+            const tf = document.getElementById('timeframe').value;
+            const res = await fetch('/historical?timeframe=' + tf);
+            const history = await res.json();
             
-            realtimeChart.data.datasets[0].data = [Math.max(0, data.delta), data.buy_volume];
-            realtimeChart.data.datasets[1].data = [Math.min(0, data.delta), data.sell_volume];
-            realtimeChart.update();
+            const labels = history.map(h => h.time);
+            const deltas = history.map(h => h.delta);
+            const colors = history.map(h => h.color);
+            
+            bottomChart.data.labels = labels;
+            bottomChart.data.datasets[0].data = deltas;
+            bottomChart.data.datasets[0].backgroundColor = colors;
+            bottomChart.update();
         }
 
-        async function fetchRealtime() {
-            try {
-                const res = await fetch('/realtime?timeframe=' + currentTimeframe);
-                const data = await res.json();
-                updateMetrics(data);
-            } catch (error) {
-                console.error('Error fetching realtime data:', error);
-            }
-        }
-
-        async function fetchHistorical() {
-            try {
-                const res = await fetch('/historical?timeframe=' + currentTimeframe);
-                const data = await res.json();
-                
-                historicalChart.data.labels = data.map(d => d.time);
-                historicalChart.data.datasets[0].data = data.map(d => d.strength_score);
-                historicalChart.update();
-            } catch (error) {
-                console.error('Error fetching historical data:', error);
-            }
-        }
-
-        function changeTimeframe() {
-            currentTimeframe = document.getElementById('timeframe').value;
-            clearInterval(historyInterval);
-            startUpdates();
-        }
-
-        function startUpdates() {
-            fetchRealtime();
-            fetchHistorical();
-            const interval = getUpdateInterval(currentTimeframe);
-            historyInterval = setInterval(fetchHistorical, interval);
-        }
-
-        function getUpdateInterval(timeframe) {
-            switch(timeframe) {
-                case '1m': return 30000;
-                case '3m': return 60000;
-                case '5m': return 90000;
-                case '15m': return 180000;
-                default: return 60000;
-            }
-        }
-
-        // Initialize
+        setInterval(updateTop, 3000);
         window.onload = () => {
-            initTheme();
-            startUpdates();
-            setInterval(fetchRealtime, 3000);
+            updateTop();
+            loadHistory();
         };
     </script>
 </body>

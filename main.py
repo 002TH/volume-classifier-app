@@ -29,16 +29,11 @@ def get_klines(interval="5m", limit=50):
         return None
 
 def calculate_delta(candle):
-    close = float(candle[4])
-    open_ = float(candle[1])
-    volume = float(candle[5])
-    
-    if close > open_:
-        return volume
-    elif close < open_:
-        return -volume
-    else:
-        return 0
+    """Professional-grade delta calculation using taker buy volume"""
+    total_volume = float(candle[5])
+    taker_buy_volume = float(candle[9])  # Taker buy base asset volume
+    taker_sell_volume = total_volume - taker_buy_volume
+    return taker_buy_volume - taker_sell_volume
 
 def analyze_candle(candle, prev_candle):
     curr_delta = calculate_delta(candle)
@@ -68,7 +63,7 @@ def analyze_candle(candle, prev_candle):
         "time": ts,
         "open": float(candle[1]),
         "close": float(candle[4]),
-        "volume": float(candle[5]),
+        "volume": total_volume,
         "delta": curr_delta,
         "label": label,
         "color": color

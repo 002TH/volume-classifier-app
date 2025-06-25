@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import requests
 
 app = FastAPI()
@@ -9,7 +10,6 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 BINANCE_API = "https://api.binance.com/api/v3"
 SYMBOL = "SOLUSDT"
-
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h"]
 
 def get_klines(interval="5m", limit=50):
@@ -29,21 +29,19 @@ def get_klines(interval="5m", limit=50):
         return None
 
 def calculate_delta(candle):
-    """Returns both delta and total volume for a candle."""
     total_volume = float(candle[5])
     taker_buy_volume = float(candle[9])
     taker_sell_volume = total_volume - taker_buy_volume
-    delta = taker_buy_volume - taker_sell_volume
-    return delta, total_volume
+    return taker_buy_volume - taker_sell_volume, total_volume
 
 def analyze_candle(candle, prev_candle):
     curr_delta, total_volume = calculate_delta(candle)
     prev_delta, _ = calculate_delta(prev_candle)
-    
+
     abs_curr = abs(curr_delta)
     abs_prev = abs(prev_delta) if abs(prev_delta) > 0 else 1
     ratio = abs_curr / abs_prev
-    
+
     if ratio >= 1.5:
         if curr_delta > 0:
             label = "Strong Buying"
@@ -57,9 +55,9 @@ def analyze_candle(candle, prev_candle):
     else:
         label = "Neutral"
         color = "#95a5a6"
-    
-    ts = datetime.fromtimestamp(candle[0] / 1000).strftime('%H:%M:%S')
-    
+
+    ts = datetime.fromtimestamp(candle[0] / 1000, ZoneInfo("Africa/Lagos")).strftime('%H:%M:%S')
+
     return {
         "time": ts,
         "open": float(candle[1]),
@@ -80,16 +78,16 @@ def get_historical_data(interval="5m"):
     data = get_klines(interval, 50)
     if not data:
         return None
-    
+
     volumes = [float(candle[5]) for candle in data]
     average_volume = sum(volumes) / len(volumes) if volumes else 0
-    
+
     results = []
     for i in range(1, len(data)):
         candle_data = analyze_candle(data[i], data[i - 1])
         candle_data["is_spike"] = candle_data["volume"] > average_volume
         results.append(candle_data)
-    
+
     return {
         "candles": results,
         "average_volume": average_volume

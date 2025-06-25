@@ -149,12 +149,6 @@
             font-size: 16px;
             color: #38bdf8;
         }
-        
-        .spike-indicator {
-            position: absolute;
-            top: -25px;
-            font-size: 24px;
-        }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
@@ -259,110 +253,105 @@
     </div>
 
     <script>
-        // Global variables
-        let realtimeChart = null;
-        let historicalChart = null;
-        let currentTimeframe = '5m';
-        
         // Initialize charts
-        function initRealtimeChart() {
-            const ctx = document.getElementById('realtimeChart').getContext('2d');
-            return new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Volume'],
-                    datasets: [{
-                        label: 'Volume',
-                        data: [0],
-                        backgroundColor: '#95a5a6',
-                        borderWidth: 0,
-                        borderRadius: 5,
-                        barThickness: 50
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: (context) => `Volume: ${context.raw}`
-                            }
-                        }
-                    },
-                    scales: {
-                        y: { beginAtZero: true, display: false },
-                        x: { display: false }
-                    }
-                }
-            });
-        }
+        const realtimeCtx = document.getElementById('realtimeChart').getContext('2d');
+        const historicalCtx = document.getElementById('historicalChart').getContext('2d');
         
-        function initHistoricalChart() {
-            const ctx = document.getElementById('historicalChart').getContext('2d');
-            return new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: [],
-                    datasets: [
-                        {
-                            label: 'Volume',
-                            data: [],
-                            backgroundColor: [],
-                            borderColor: [],
-                            borderWidth: 2,
-                            borderRadius: 3,
-                            barThickness: 8
-                        },
-                        {
-                            label: 'Avg Volume',
-                            data: [],
-                            type: 'line',
-                            borderColor: 'var(--avg-line)',
-                            borderWidth: 2,
-                            fill: false,
-                            pointRadius: 0
+        const realtimeChart = new Chart(realtimeCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Volume'],
+                datasets: [{
+                    label: 'Volume',
+                    data: [0],
+                    backgroundColor: '#95a5a6',
+                    borderWidth: 0,
+                    borderRadius: 5,
+                    barThickness: 50
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `Volume: ${context.raw}`
                         }
-                    ]
+                    }
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { 
-                            display: true,
-                            labels: { color: '#e2e8f0' }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                title: (items) => `Time: ${items[0].label}`,
-                                label: (context) => {
-                                    if (context.datasetIndex === 0) {
-                                        return [
-                                            `Volume: ${context.raw.y.toLocaleString()}`,
-                                            `Delta: ${context.raw.delta > 0 ? '+' : ''}${context.raw.delta.toFixed(2)}`,
-                                            context.raw.is_spike ? '📈 Volume Spike!' : ''
-                                        ];
-                                    } else {
-                                        return `Avg Volume: ${context.raw.toLocaleString()}`;
-                                    }
+                scales: {
+                    y: { beginAtZero: true, display: false },
+                    x: { display: false }
+                }
+            }
+        });
+        
+        const historicalChart = new Chart(historicalCtx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Volume',
+                        data: [],
+                        backgroundColor: [],
+                        borderColor: [],
+                        borderWidth: 2,
+                        borderRadius: 3,
+                        barThickness: 8
+                    },
+                    {
+                        label: 'Avg Volume',
+                        data: [],
+                        type: 'line',
+                        borderColor: 'var(--avg-line)',
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: true,
+                        labels: { color: '#e2e8f0' }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => `Time: ${items[0].label}`,
+                            label: (context) => {
+                                if (context.datasetIndex === 0) {
+                                    return [
+                                        `Volume: ${context.raw.y.toLocaleString()}`,
+                                        `Delta: ${context.raw.delta > 0 ? '+' : ''}${context.raw.delta.toFixed(2)}`,
+                                        context.raw.is_spike ? '📈 Volume Spike!' : ''
+                                    ];
+                                } else {
+                                    return `Avg Volume: ${context.raw.toLocaleString()}`;
                                 }
                             }
                         }
-                    },
-                    scales: {
-                        y: { 
-                            beginAtZero: true,
-                            grid: { color: 'rgba(255,255,255,0.08)' }
-                        },
-                        x: { display: false }
                     }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.08)' }
+                    },
+                    x: { display: false }
                 }
-            });
-        }
+            }
+        });
         
-        // Format timestamp for display
+        // Global state
+        let currentTimeframe = '5m';
+        
+        // Format timestamp
         function formatTime() {
             const now = new Date();
             return now.toTimeString().split(' ')[0];
@@ -419,12 +408,8 @@
                 const spikeCount = data.candles.filter(c => c.is_spike).length;
                 document.getElementById('spike-count').textContent = spikeCount;
                 
-                // Prepare chart data
-                const labels = data.candles.map(d => d.time);
-                const volumes = data.candles.map(d => d.volume);
-                
                 // Update chart
-                historicalChart.data.labels = labels;
+                historicalChart.data.labels = data.candles.map(d => d.time);
                 historicalChart.data.datasets[0].data = data.candles.map(d => ({
                     x: d.time,
                     y: d.volume,
@@ -457,19 +442,18 @@
             updateHistorical();
         }
         
-        // Initialize
-        window.onload = () => {
-            realtimeChart = initRealtimeChart();
-            historicalChart = initHistoricalChart();
-            
-            // Initial data load
+        // Initialize dashboard
+        function initDashboard() {
             updateRealtime();
             updateHistorical();
             
             // Set up intervals
-            setInterval(updateRealtime, 3000);  // Update real-time every 3 seconds
-            setInterval(updateHistorical, 30000); // Update historical every 30 seconds
-        };
+            setInterval(updateRealtime, 3000);
+            setInterval(updateHistorical, 30000);
+        }
+        
+        // Start when page loads
+        window.onload = initDashboard;
     </script>
 </body>
 </html>

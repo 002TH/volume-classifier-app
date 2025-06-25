@@ -10,13 +10,20 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 BINANCE_API = "https://api.binance.com/api/v3"
 SYMBOL = "SOLUSDT"
 
-def get_klines(interval="5m", limit=50):
+# Supported timeframes including 1m and 3m
+SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d"]
+
+def get_klines(interval="5m", limit=1000):
     try:
+        # Validate timeframe
+        if interval not in SUPPORTED_TIMEFRAMES:
+            interval = "5m"  # Default to 5m if invalid
+        
         response = requests.get(f"{BINANCE_API}/klines", params={
             "symbol": SYMBOL,
             "interval": interval,
             "limit": limit
-        }, timeout=5)
+        }, timeout=15)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -29,93 +36,63 @@ def calculate_delta(candle):
     open_ = float(candle[1])
     volume = float(candle[5])
     
-    if close > open_:  # Bullish candle - all volume counted as buy
+    if close > open_:  # Bullish candle
         return volume
-    elif close < open_:  # Bearish candle - all volume counted as sell
+    elif close < open_:  # Bearish candle
         return -volume
-    else:  # Neutral candle - split volume
+    else:  # Neutral candle
         return 0
 
-def analyze_volume(candle, prev_candle):
-    curr_delta = calculate_delta(candle)
-    prev_delta = calculate_delta(prev_candle)
-    open_ = float(candle[1])
-    close = float(candle[4])
-    ts = datetime.fromtimestamp(candle[0]/1000).strftime('%H:%M:%S')
-
-    # Neutral case
-    if curr_delta == 0:
-        return {
-            "label": "Neutral",
-            "color": "#3498db",
+def analyze_volume(interval="5m"):
+    candles = get_klines(interval, 1000)
+    if not candles or len(candles) < 2:
+        return []
+    
+    results = []
+    for i in range(1, len(candles)):
+        prev_candle = candles[i-1]
+        candle = candles[i]
+        
+        curr_delta = calculate_delta(candle)
+        prev_delta = calculate_delta(prev_candle)
+        
+        # Calculate ratio (absolute values)
+        abs_curr = abs(curr_delta)
+        abs_prev = abs(prev_delta) if abs(prev_delta) > 0 else 1  # Avoid division by zero
+        
+        ratio = abs_curr / abs_prev
+        
+        # Determine color based on ratio and direction
+        if ratio >= 1.5:  # Strong signal threshold
+            if curr_delta > 0:
+                color = "#00ff00"  # Green (strong buy)
+            elif curr_delta < 0:
+                color = "#ff0000"  # Red (strong sell)
+            else:
+                color = "#95a5a6"  # Gray (neutral)
+        else:
+            color = "#95a5a6"  # Gray (neutral)
+        
+        # Format time
+        ts = datetime.fromtimestamp(candle[0]/1000).strftime('%H:%M')
+        
+        results.append({
+            "time": ts,
             "volume": float(candle[5]),
-            "delta": 0,
-            "open": open_,
-            "close": close,
-            "time": ts
-        }
-
-    # Determine strength based on delta change
-    delta_ratio = abs(curr_delta) / abs(prev_delta) if prev_delta != 0 else 1
-
-    if curr_delta > 0:  # Buying pressure
-        if delta_ratio > 1.5:
-            return {
-                "label": "Strong Buying",
-                "color": "#00ff00",
-                "volume": float(candle[5]),
-                "delta": curr_delta,
-                "open": open_,
-                "close": close,
-                "time": ts
-            }
-        else:
-            return {
-                "label": "Buying Pressure",
-                "color": "#2ecc71",
-                "volume": float(candle[5]),
-                "delta": curr_delta,
-                "open": open_,
-                "close": close,
-                "time": ts
-            }
-    else:  # Selling pressure
-        if delta_ratio > 1.5:
-            return {
-                "label": "Strong Selling",
-                "color": "#ff0000",
-                "volume": float(candle[5]),
-                "delta": curr_delta,
-                "open": open_,
-                "close": close,
-                "time": ts
-            }
-        else:
-            return {
-                "label": "Selling Pressure",
-                "color": "#e74c3c",
-                "volume": float(candle[5]),
-                "delta": curr_delta,
-                "open": open_,
-                "close": close,
-                "time": ts
-            }
+            "delta": curr_delta,
+            "color": color
+        })
+    
+    return results
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     with open("static/index.html", "r") as f:
         return HTMLResponse(content=f.read(), status_code=200)
 
-@app.get("/realtime")
-async def get_realtime(timeframe: str = "1m"):
-    data = get_klines(interval=timeframe, limit=2)
-    if not data or len(data) < 2:
-        return JSONResponse({"error": "Data fetch failed"}, status_code=500)
-    return analyze_volume(data[-1], data[-2])
-
-@app.get("/historical")
-async def get_historical(timeframe: str = "1m"):
-    data = get_klines(interval=timeframe, limit=50)
+@app.get("/volume-data")
+async def get_volume_data(timeframe: str = "5m"):
+    data = analyze_volume(timeframe)
     if not data:
         return JSONResponse({"error": "Data fetch failed"}, status_code=500)
-    return [analyze_volume(data[i], data[i-1]) for i in range(1, len(data))]
+    return data

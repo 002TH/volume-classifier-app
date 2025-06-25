@@ -1,194 +1,90 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>SOLUSDT Volume Pressure Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    body {
-      font-family: Arial;
-      background: #f0f0f0;
-      padding: 20px;
-    }
-    .container {
-      max-width: 1000px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-    }
-    .panel {
-      margin-bottom: 40px;
-    }
-    .chart-box {
-      height: 300px;
-      margin-top: 10px;
-    }
-    .pressure {
-      font-size: 18px;
-      font-weight: bold;
-      margin-top: 10px;
-      padding: 10px;
-      border-radius: 5px;
-    }
-    select, button {
-      padding: 8px 12px;
-      margin-right: 10px;
-    }
-    .section-title {
-      margin-bottom: 5px;
-      font-size: 20px;
-      font-weight: bold;
-    }
-  </style>
+    <title>SOLUSDT Volume Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+        .container { background: white; padding: 20px; border-radius: 10px; }
+        canvas { margin-top: 20px; }
+        select { padding: 8px; margin-right: 10px; }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <h1 style="text-align:center;">SOL/USDT Volume Pressure Dashboard</h1>
+    <div class="container">
+        <h2>🔼 Real-Time Volume Pressure</h2>
+        <div><strong>Status:</strong> <span id="label"></span></div>
+        <div><strong>Open:</strong> <span id="open"></span> | <strong>Close:</strong> <span id="close"></span></div>
+        <div><strong>Volume:</strong> <span id="volume"></span> | <strong>Time:</strong> <span id="time"></span></div>
+        <canvas id="topChart" height="150"></canvas>
 
-    <!-- Controls -->
-    <div>
-      <select id="timeframe" onchange="onTimeframeChange()">
-        <option value="1m" selected>1 Minute</option>
-        <option value="3m">3 Minutes</option>
-        <option value="5m">5 Minutes</option>
-        <option value="15m">15 Minutes</option>
-      </select>
-      <button onclick="updateTop()">Refresh Now</button>
-      <span id="lastUpdated" style="font-weight:bold;"></span>
+        <hr>
+
+        <h2>🔽 Historical Volume Pressure</h2>
+        <label>Select Timeframe:</label>
+        <select id="timeframe" onchange="loadHistory()">
+            <option value="1m">1 Minute</option>
+            <option value="3m">3 Minute</option>
+            <option value="5m" selected>5 Minute</option>
+            <option value="15m">15 Minute</option>
+        </select>
+        <canvas id="bottomChart" height="200"></canvas>
     </div>
 
-    <!-- Top Panel -->
-    <div class="panel">
-      <div class="section-title">Current Candle Pressure (updates every 3s)</div>
-      <div class="pressure" id="pressureBox">Loading...</div>
-      <div class="chart-box">
-        <canvas id="topChart"></canvas>
-      </div>
-    </div>
+    <script>
+        const topCtx = document.getElementById('topChart').getContext('2d');
+        const bottomCtx = document.getElementById('bottomChart').getContext('2d');
 
-    <!-- Bottom Panel -->
-    <div class="panel">
-      <div class="section-title">Historical Volume Pressure</div>
-      <div class="chart-box">
-        <canvas id="bottomChart"></canvas>
-      </div>
-    </div>
-  </div>
+        let topChart = new Chart(topCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Current'],
+                datasets: [{
+                    label: 'Volume',
+                    data: [0],
+                    backgroundColor: '#ccc'
+                }]
+            },
+            options: { responsive: true }
+        });
 
-  <script>
-    let topChart, bottomChart, historyInterval;
+        let bottomChart = new Chart(bottomCtx, {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: 'Volume', data: [], backgroundColor: [] }] },
+            options: { responsive: true }
+        });
 
-    // Initialize charts
-    function initCharts() {
-      const ctxTop = document.getElementById('topChart').getContext('2d');
-      const ctxBottom = document.getElementById('bottomChart').getContext('2d');
-
-      topChart = new Chart(ctxTop, {
-        type: 'bar',
-        data: {
-          labels: ['Volume'],
-          datasets: [{
-            label: 'Current Volume',
-            data: [0],
-            backgroundColor: '#ccc'
-          }]
-        },
-        options: { responsive: true, plugins: { legend: { display: false } } }
-      });
-
-      bottomChart = new Chart(ctxBottom, {
-        type: 'bar',
-        data: {
-          labels: [],
-          datasets: [{
-            label: 'Historical Volume',
-            data: [],
-            backgroundColor: []
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `Volume: ${context.raw.toLocaleString()}`;
-                }
-              }
-            }
-          },
-          scales: {
-            x: { ticks: { maxRotation: 0, autoSkip: true } },
-            y: { beginAtZero: false }
-          }
+        async function updateTop() {
+            const res = await fetch('/realtime?timeframe=' + document.getElementById('timeframe').value);
+            const data = await res.json();
+            document.getElementById('label').textContent = data.label;
+            document.getElementById('volume').textContent = data.volume.toLocaleString();
+            document.getElementById('open').textContent = data.open;
+            document.getElementById('close').textContent = data.close;
+            document.getElementById('time').textContent = data.time;
+            topChart.data.datasets[0].data = [data.volume];
+            topChart.data.datasets[0].backgroundColor = data.color;
+            topChart.update();
         }
-      });
-    }
 
-    // Fetch current candle pressure
-    async function updateTop() {
-      try {
-        const tf = document.getElementById('timeframe').value;
-        const res = await fetch('/data?timeframe=' + tf);
-        const d = await res.json();
-        if (d.error) return;
+        async function loadHistory() {
+            const tf = document.getElementById('timeframe').value;
+            const res = await fetch('/historical?timeframe=' + tf);
+            const history = await res.json();
+            const labels = history.map(h => h.time);
+            const volumes = history.map(h => h.volume);
+            const colors = history.map(h => h.color);
+            bottomChart.data.labels = labels;
+            bottomChart.data.datasets[0].data = volumes;
+            bottomChart.data.datasets[0].backgroundColor = colors;
+            bottomChart.update();
+        }
 
-        topChart.data.datasets[0].data = [d.current_volume];
-        topChart.data.datasets[0].backgroundColor = d.color;
-        topChart.update();
-
-        document.getElementById('pressureBox').textContent = d.pressure;
-        document.getElementById('pressureBox').style.color = d.color;
-        document.getElementById('lastUpdated').textContent = `Last: ${d.timestamp}`;
-      } catch (e) {
-        console.error('Top update error:', e);
-      }
-    }
-
-    // Fetch historical data
-    async function loadHistory() {
-      const tf = document.getElementById('timeframe').value;
-      const res = await fetch('/historical?timeframe=' + tf);
-      const history = await res.json();
-
-      const labels = history.map(h => h.time);
-      const volumes = history.map(h => h.volume);
-      const colors = history.map(h => h.color);
-
-      bottomChart.data.labels = labels;
-      bottomChart.data.datasets[0].data = volumes;
-      bottomChart.data.datasets[0].backgroundColor = colors;
-      bottomChart.update();
-
-      startHistoryAutoUpdate();
-    }
-
-    // Set interval for auto-history update based on timeframe
-    function startHistoryAutoUpdate() {
-      if (historyInterval) clearInterval(historyInterval);
-      const tf = document.getElementById('timeframe').value;
-
-      let seconds = 60;
-      if (tf === "3m") seconds = 180;
-      else if (tf === "5m") seconds = 300;
-      else if (tf === "15m") seconds = 900;
-
-      historyInterval = setInterval(loadHistory, seconds * 1000);
-    }
-
-    function onTimeframeChange() {
-      loadHistory();
-      updateTop();
-    }
-
-    window.onload = () => {
-      initCharts();
-      updateTop();
-      loadHistory();
-      setInterval(updateTop, 3000); // Always keep current candle updating
-    };
-  </script>
+        setInterval(updateTop, 3000);
+        window.onload = () => {
+            updateTop();
+            loadHistory();
+        };
+    </script>
 </body>
 </html>

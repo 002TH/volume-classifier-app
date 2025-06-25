@@ -1,113 +1,364 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SOLUSDT Delta Pressure Dashboard</title>
+    <title>SOLUSDT Volume Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
-        .container { background: white; padding: 20px; border-radius: 10px; }
-        canvas { margin-top: 20px; }
-        select { padding: 8px; margin-right: 10px; }
-        .delta-positive { color: #2ecc71; }
-        .delta-negative { color: #e74c3c; }
-        .delta-neutral { color: #3498db; }
+        :root {
+            --bg-color: #0f172a;
+            --container-bg: #1e293b;
+            --text-color: #e2e8f0;
+            --green: #00ff00;
+            --red: #ff0000;
+            --gray: #95a5a6;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            padding: 20px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+        }
+        
+        .container {
+            background: var(--container-bg);
+            padding: 25px;
+            border-radius: 12px;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #38bdf8;
+            margin: 0;
+            font-size: 32px;
+            letter-spacing: -0.5px;
+        }
+        
+        .subtitle {
+            color: #94a3b8;
+            margin-top: 8px;
+            font-size: 18px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        
+        select {
+            padding: 12px 20px;
+            background: #334155;
+            color: var(--text-color);
+            border: 2px solid #475569;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 120px;
+            text-align: center;
+        }
+        
+        select:hover {
+            border-color: #38bdf8;
+            transform: translateY(-2px);
+        }
+        
+        .chart-container {
+            height: 500px;
+            position: relative;
+            margin: 30px 0;
+        }
+        
+        .time-axis {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 10px 0;
+            font-size: 14px;
+            color: #94a3b8;
+            border-top: 1px solid #334155;
+            margin-top: 10px;
+        }
+        
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 25px;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        .legend-label {
+            font-size: 16px;
+            font-weight: 500;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-around;
+            background: #334155;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 25px 0;
+            font-size: 18px;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat-label {
+            color: #94a3b8;
+            font-size: 16px;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+        }
+        
+        .green { color: var(--green); }
+        .red { color: var(--red); }
+        .gray { color: var(--gray); }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+            color: #38bdf8;
+        }
+        
+        .time-warning {
+            text-align: center;
+            color: #fbbf24;
+            margin-top: 10px;
+            font-size: 14px;
+        }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h2>🔼 Real-Time Delta Pressure</h2>
-        <div><strong>Status:</strong> <span id="label"></span></div>
-        <div><strong>Delta:</strong> <span id="delta"></span></div>
-        <div><strong>Open:</strong> <span id="open"></span> | <strong>Close:</strong> <span id="close"></span></div>
-        <div><strong>Volume:</strong> <span id="volume"></span> | <strong>Time:</strong> <span id="time"></span></div>
-        <canvas id="topChart" height="150"></canvas>
-
-        <hr>
-
-        <h2>🔽 Historical Delta Pressure</h2>
-        <label>Select Timeframe:</label>
-        <select id="timeframe" onchange="loadHistory()">
-            <option value="1m">1 Minute</option>
-            <option value="3m">3 Minute</option>
-            <option value="5m" selected>5 Minute</option>
-            <option value="15m">15 Minute</option>
-        </select>
-        <canvas id="bottomChart" height="200"></canvas>
+        <header>
+            <h1>SOLUSDT Volume Dashboard</h1>
+            <div class="subtitle">Volume Analysis (Last 1000 Candles)</div>
+        </header>
+        
+        <div class="status-bar">
+            <div class="stat">
+                <div class="stat-label">Current Time</div>
+                <div class="stat-value" id="current-time">--:--:--</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Timeframe</div>
+                <div class="stat-value" id="current-interval">5m</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Candles</div>
+                <div class="stat-value">1000</div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <select id="timeframe" onchange="loadVolumeData()">
+                <option value="1m">1 Minute</option>
+                <option value="3m">3 Minute</option>
+                <option value="5m" selected>5 Minute</option>
+                <option value="15m">15 Minute</option>
+                <option value="30m">30 Minute</option>
+                <option value="1h">1 Hour</option>
+                <option value="4h">4 Hour</option>
+                <option value="1d">1 Day</option>
+            </select>
+        </div>
+        
+        <div class="time-warning" id="time-warning">
+            Note: 1m/3m timeframes may take longer to load
+        </div>
+        
+        <div class="chart-container">
+            <canvas id="volumeChart"></canvas>
+            <div id="loading" class="loading">Loading volume data...</div>
+        </div>
+        
+        <div class="time-axis" id="time-axis"></div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--green);"></div>
+                <div class="legend-label">Strong Buy (≥1.5Δ)</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--red);"></div>
+                <div class="legend-label">Strong Sell (≥1.5Δ)</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--gray);"></div>
+                <div class="legend-label">Neutral</div>
+            </div>
+        </div>
     </div>
 
     <script>
-        const topCtx = document.getElementById('topChart').getContext('2d');
-        const bottomCtx = document.getElementById('bottomChart').getContext('2d');
-
-        let topChart = new Chart(topCtx, {
-            type: 'bar',
-            data: {
-                labels: ['Current'],
-                datasets: [{
-                    label: 'Delta Pressure',
-                    data: [0],
-                    backgroundColor: '#ccc'
-                }]
-            },
-            options: { responsive: true }
-        });
-
-        let bottomChart = new Chart(bottomCtx, {
-            type: 'bar',
-            data: { 
-                labels: [], 
-                datasets: [{ 
-                    label: 'Delta Pressure', 
-                    data: [], 
-                    backgroundColor: [] 
-                }] 
-            },
-            options: { responsive: true }
-        });
-
-        function updateDeltaClass(value) {
-            const deltaEl = document.getElementById('delta');
-            deltaEl.className = value > 0 ? 'delta-positive' : 
-                               value < 0 ? 'delta-negative' : 'delta-neutral';
+        // Global variables
+        let volumeChart = null;
+        let currentData = [];
+        
+        // Initialize chart
+        function initChart() {
+            const ctx = document.getElementById('volumeChart').getContext('2d');
+            return new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Volume',
+                        data: [],
+                        backgroundColor: [],
+                        borderColor: 'rgba(0,0,0,0)',
+                        borderWidth: 0,
+                        borderRadius: 3,
+                        barThickness: 12
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => `Time: ${items[0].label}`,
+                                label: (context) => [
+                                    `Volume: ${context.raw.volume.toLocaleString()}`,
+                                    `Delta: ${context.raw.delta > 0 ? '+' : ''}${context.raw.delta.toFixed(2)}`,
+                                    `Status: ${context.raw.delta >= 1.5 ? 'Strong Buy' : context.raw.delta <= -1.5 ? 'Strong Sell' : 'Neutral'}`
+                                ]
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255,255,255,0.08)' },
+                            ticks: { 
+                                color: '#94a3b8',
+                                font: { size: 14 }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { display: false }
+                        }
+                    }
+                }
+            });
         }
-
-        async function updateTop() {
-            const res = await fetch('/realtime?timeframe=' + document.getElementById('timeframe').value);
-            const data = await res.json();
-            
-            document.getElementById('label').textContent = data.label;
-            document.getElementById('delta').textContent = data.delta.toFixed(2);
-            document.getElementById('volume').textContent = data.volume.toLocaleString();
-            document.getElementById('open').textContent = data.open;
-            document.getElementById('close').textContent = data.close;
-            document.getElementById('time').textContent = data.time;
-            
-            updateDeltaClass(data.delta);
-            
-            topChart.data.datasets[0].data = [data.delta];
-            topChart.data.datasets[0].backgroundColor = data.color;
-            topChart.update();
+        
+        // Update time display
+        function updateCurrentTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = 
+                now.toTimeString().substr(0, 8);
         }
-
-        async function loadHistory() {
-            const tf = document.getElementById('timeframe').value;
-            const res = await fetch('/historical?timeframe=' + tf);
-            const history = await res.json();
+        
+        // Load volume data
+        async function loadVolumeData() {
+            const timeframe = document.getElementById('timeframe').value;
+            document.getElementById('current-interval').textContent = timeframe;
             
-            const labels = history.map(h => h.time);
-            const deltas = history.map(h => h.delta);
-            const colors = history.map(h => h.color);
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'block';
             
-            bottomChart.data.labels = labels;
-            bottomChart.data.datasets[0].data = deltas;
-            bottomChart.data.datasets[0].backgroundColor = colors;
-            bottomChart.update();
+            try {
+                const response = await fetch(`/volume-data?timeframe=${timeframe}`);
+                currentData = await response.json();
+                
+                if (!volumeChart) {
+                    volumeChart = initChart();
+                }
+                
+                // Prepare chart data
+                const labels = currentData.map(d => d.time);
+                
+                // Update chart
+                volumeChart.data.labels = labels;
+                volumeChart.data.datasets[0].data = currentData.map(d => ({
+                    x: d.time,
+                    y: d.volume,
+                    volume: d.volume,
+                    delta: d.delta
+                }));
+                volumeChart.data.datasets[0].backgroundColor = currentData.map(d => d.color);
+                volumeChart.update();
+                
+                // Update time axis
+                updateTimeAxis();
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+            } finally {
+                // Hide loading indicator
+                document.getElementById('loading').style.display = 'none';
+            }
         }
-
-        setInterval(updateTop, 3000);
+        
+        // Update time axis labels
+        function updateTimeAxis() {
+            if (currentData.length === 0) return;
+            
+            const timeAxis = document.getElementById('time-axis');
+            timeAxis.innerHTML = '';
+            
+            // Determine interval based on timeframe
+            const timeframe = document.getElementById('timeframe').value;
+            let step = 1;
+            
+            if (timeframe === '1m') step = 60;
+            else if (timeframe === '3m') step = 20;
+            else if (timeframe === '5m') step = 12;
+            else if (timeframe === '15m') step = 4;
+            else if (timeframe === '30m') step = 2;
+            else step = 1;
+            
+            // Only show every Nth label for readability
+            for (let i = 0; i < currentData.length; i += step) {
+                const timeLabel = document.createElement('div');
+                timeLabel.textContent = currentData[i].time;
+                timeAxis.appendChild(timeLabel);
+            }
+        }
+        
+        // Initialize
         window.onload = () => {
-            updateTop();
-            loadHistory();
+            volumeChart = initChart();
+            updateCurrentTime();
+            setInterval(updateCurrentTime, 1000);
+            loadVolumeData();
+            setInterval(loadVolumeData, 300000); // Refresh every 5 minutes
         };
     </script>
 </body>

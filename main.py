@@ -39,7 +39,7 @@ def analyze_volume(candle, prev_candle):
                 "volume": curr_vol, "open": open_, "close": close, "time": ts}
     elif close < open_:
         return {"label": "Strong Selling" if curr_vol > prev_vol * 1.5 else "Selling Pressure",
-                "color": "#ff0000" if curr_vol > prev_vol * 1.5 else "#e74c3c",
+                "color": "#ff0000" if curr_vol > prev_vol * 1.5 else "#ffc0504d",
                 "volume": curr_vol, "open": open_, "close": close, "time": ts}
     else:
         return {"label": "Neutral", "color": "#3498db", "volume": curr_vol, "open": open_, "close": close, "time": ts}

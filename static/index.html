@@ -1,9 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SOLUSDT Delta-Volume Dashboard</title>
+    <title>SOLUSDT Volume Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.0.2"></script>
     <style>
         :root {
             --bg-color: #f4f4f4;
@@ -30,14 +29,13 @@
             padding: 20px;
             background: var(--bg-color);
             color: var(--text-color);
-            transition: background 0.3s, color 0.3s;
+            transition: all 0.3s;
         }
         
         .container {
             background: var(--container-bg);
             padding: 20px;
             border-radius: 10px;
-            transition: background 0.3s;
             margin-bottom: 20px;
         }
         
@@ -47,10 +45,10 @@
             gap: 20px;
         }
         
-        canvas { 
-            margin-top: 20px;
+        canvas {
             width: 100% !important;
             height: 300px !important;
+            margin-top: 20px;
         }
         
         select, button {
@@ -62,8 +60,6 @@
             border-radius: 4px;
         }
         
-        hr { border-color: var(--hr-color); }
-        
         .theme-toggle {
             position: absolute;
             top: 20px;
@@ -73,7 +69,6 @@
             padding: 8px 12px;
             border-radius: 4px;
             cursor: pointer;
-            color: var(--text-color);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -147,7 +142,7 @@
     </div>
 
     <script>
-        // Theme management (same as before)
+        // Theme management
         function applyTheme(isDark) {
             if (isDark) {
                 document.body.classList.add('dark-mode');
@@ -185,7 +180,6 @@
         let currentTimeframe = '5m';
         let historyInterval;
         
-        // Real-time chart (combined delta/volume)
         let realtimeChart = new Chart(realtimeCtx, {
             type: 'bar',
             data: {
@@ -196,43 +190,23 @@
                         data: [0, 0],
                         backgroundColor: getComputedStyle(document.documentElement)
                             .getPropertyValue('--bullish-color'),
-                        borderColor: 'transparent',
-                        borderWidth: 1
+                        borderColor: 'transparent'
                     },
                     {
                         label: 'Sell Volume',
                         data: [0, 0],
                         backgroundColor: getComputedStyle(document.documentElement)
                             .getPropertyValue('--bearish-color'),
-                        borderColor: 'transparent',
-                        borderWidth: 1
+                        borderColor: 'transparent'
                     }
                 ]
             },
             options: {
                 responsive: true,
-                scales: {
-                    x: { stacked: true },
-                    y: { stacked: false }
-                },
-                plugins: {
-                    tooltip: { mode: 'index' },
-                    annotation: {
-                        annotations: {
-                            zeroLine: {
-                                type: 'line',
-                                yMin: 0,
-                                yMax: 0,
-                                borderColor: 'rgb(150, 150, 150)',
-                                borderWidth: 1
-                            }
-                        }
-                    }
-                }
+                scales: { x: { stacked: true }, y: { stacked: false } }
             }
         });
 
-        // Historical chart (strength over time)
         let historicalChart = new Chart(historicalCtx, {
             type: 'line',
             data: {
@@ -244,43 +218,23 @@
                         borderColor: getComputedStyle(document.documentElement)
                             .getPropertyValue('--bullish-color'),
                         backgroundColor: 'transparent',
-                        tension: 0.1,
-                        fill: false
-                    },
-                    {
-                        label: 'Delta',
-                        data: [],
-                        borderColor: getComputedStyle(document.documentElement)
-                            .getPropertyValue('--bearish-color'),
-                        backgroundColor: 'transparent',
-                        tension: 0.1,
-                        fill: false,
-                        hidden: true
+                        tension: 0.1
                     }
                 ]
             },
             options: {
                 responsive: true,
-                interaction: { mode: 'index' },
-                scales: {
-                    y: {
-                        min: -100,
-                        max: 100
-                    }
-                }
+                scales: { y: { min: -100, max: 100 } }
             }
         });
 
-        // Update UI with new data
         function updateMetrics(data) {
-            // Update metric cards
             document.getElementById('current-delta').textContent = data.delta.toFixed(2);
             document.getElementById('strength-score').textContent = data.strength_score.toFixed(0);
             document.getElementById('buy-volume').textContent = data.buy_volume.toFixed(2);
             document.getElementById('sell-volume').textContent = data.sell_volume.toFixed(2);
             document.getElementById('total-volume').textContent = data.volume.toFixed(2);
             
-            // Set direction classes
             const deltaEl = document.getElementById('delta-direction');
             const strengthEl = document.getElementById('strength-label');
             
@@ -293,13 +247,11 @@
                 Math.abs(data.strength_score) > 50 ? 'Strong' :
                 Math.abs(data.strength_score) > 25 ? 'Moderate' : 'Weak';
             
-            // Update realtime chart
             realtimeChart.data.datasets[0].data = [Math.max(0, data.delta), data.buy_volume];
             realtimeChart.data.datasets[1].data = [Math.min(0, data.delta), data.sell_volume];
             realtimeChart.update();
         }
 
-        // Data fetching functions
         async function fetchRealtime() {
             try {
                 const res = await fetch('/realtime?timeframe=' + currentTimeframe);
@@ -317,7 +269,6 @@
                 
                 historicalChart.data.labels = data.map(d => d.time);
                 historicalChart.data.datasets[0].data = data.map(d => d.strength_score);
-                historicalChart.data.datasets[1].data = data.map(d => d.delta);
                 historicalChart.update();
             } catch (error) {
                 console.error('Error fetching historical data:', error);

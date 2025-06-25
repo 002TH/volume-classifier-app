@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SOLUSDT Volume Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+        .container { background: white; padding: 20px; border-radius: 10px; }
+        canvas { margin-top: 20px; }
+        select { padding: 8px; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔼 Real-Time Volume Pressure</h2>
+        <div><strong>Status:</strong> <span id="label"></span></div>
+        <div><strong>Open:</strong> <span id="open"></span> | <strong>Close:</strong> <span id="close"></span></div>
+        <div><strong>Volume:</strong> <span id="volume"></span> | <strong>Time:</strong> <span id="time"></span></div>
+        <canvas id="topChart" height="150"></canvas>
+
+        <hr>
+
+        <h2>🔽 Historical Volume Pressure</h2>
+        <label>Select Timeframe:</label>
+        <select id="timeframe" onchange="loadHistory()">
+            <option value="1m">1 Minute</option>
+            <option value="3m">3 Minute</option>
+            <option value="5m" selected>5 Minute</option>
+            <option value="15m">15 Minute</option>
+        </select>
+        <canvas id="bottomChart" height="200"></canvas>
+    </div>
+
+    <script>
+        const topCtx = document.getElementById('topChart').getContext('2d');
+        const bottomCtx = document.getElementById('bottomChart').getContext('2d');
+
+        let topChart = new Chart(topCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Current'],
+                datasets: [{
+                    label: 'Volume',
+                    data: [0],
+                    backgroundColor: '#ccc'
+                }]
+            },
+            options: { responsive: true }
+        });
+
+        let bottomChart = new Chart(bottomCtx, {
+            type: 'bar',
+            data: { labels: [], datasets: [{ label: 'Volume', data: [], backgroundColor: [] }] },
+            options: { responsive: true }
+        });
+
+        async function updateTop() {
+            const res = await fetch('/realtime?timeframe=' + document.getElementById('timeframe').value);
+            const data = await res.json();
+            document.getElementById('label').textContent = data.label;
+            document.getElementById('volume').textContent = data.volume.toLocaleString();
+            document.getElementById('open').textContent = data.open;
+            document.getElementById('close').textContent = data.close;
+            document.getElementById('time').textContent = data.time;
+            topChart.data.datasets[0].data = [data.volume];
+            topChart.data.datasets[0].backgroundColor = data.color;
+            topChart.update();
+        }
+
+        async function loadHistory() {
+            const tf = document.getElementById('timeframe').value;
+            const res = await fetch('/historical?timeframe=' + tf);
+            const history = await res.json();
+            const labels = history.map(h => h.time);
+            const volumes = history.map(h => h.volume);
+            const colors = history.map(h => h.color);
+            bottomChart.data.labels = labels;
+            bottomChart.data.datasets[0].data = volumes;
+            bottomChart.data.datasets[0].backgroundColor = colors;
+            bottomChart.update();
+        }
+
+        setInterval(updateTop, 3000);
+        window.onload = () => {
+            updateTop();
+            loadHistory();
+        };
+    </script>
+</body>
+</html>

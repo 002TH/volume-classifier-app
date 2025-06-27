@@ -1,8 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta
 import requests
 
 app = FastAPI()
@@ -16,7 +15,6 @@ def get_klines(interval="5m", limit=50):
     try:
         if interval not in SUPPORTED_TIMEFRAMES:
             interval = "5m"
-        
         response = requests.get(f"{BINANCE_API}/klines", params={
             "symbol": SYMBOL,
             "interval": interval,
@@ -25,7 +23,7 @@ def get_klines(interval="5m", limit=50):
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"[❌ Klines Error] {e}")
         return None
 
 def calculate_delta(candle):
@@ -33,6 +31,11 @@ def calculate_delta(candle):
     taker_buy_volume = float(candle[9])
     taker_sell_volume = total_volume - taker_buy_volume
     return taker_buy_volume - taker_sell_volume, total_volume
+
+def to_local_time(timestamp_ms):
+    # Convert from UTC to Nigerian time (UTC+1)
+    dt = datetime.utcfromtimestamp(timestamp_ms / 1000) + timedelta(hours=1)
+    return dt.strftime('%H:%M:%S')
 
 def analyze_candle(candle, prev_candle):
     curr_delta, total_volume = calculate_delta(candle)
@@ -56,8 +59,7 @@ def analyze_candle(candle, prev_candle):
         label = "Neutral"
         color = "#95a5a6"
 
-    ts = datetime.fromtimestamp(candle[0] / 1000, ZoneInfo("Africa/Lagos")).strftime('%H:%M:%S')
-
+    ts = to_local_time(candle[0])
     return {
         "time": ts,
         "open": float(candle[1]),
@@ -76,15 +78,15 @@ def get_realtime_data(interval="5m"):
 
 def get_historical_data(interval="5m"):
     data = get_klines(interval, 50)
-    if not data:
+    if not data or len(data) < 2:
         return None
 
-    volumes = [float(candle[5]) for candle in data]
-    average_volume = sum(volumes) / len(volumes) if volumes else 0
+    volumes = [float(c[5]) for c in data]
+    average_volume = sum(volumes) / len(volumes)
 
     results = []
     for i in range(1, len(data)):
-        candle_data = analyze_candle(data[i], data[i - 1])
+        candle_data = analyze_candle(data[i], data[i-1])
         candle_data["is_spike"] = candle_data["volume"] > average_volume
         results.append(candle_data)
 
@@ -100,14 +102,18 @@ async def home(request: Request):
 
 @app.get("/realtime")
 async def get_realtime(timeframe: str = "5m"):
+    print(f"🔁 [Realtime] Endpoint hit | Timeframe: {timeframe}")
     data = get_realtime_data(timeframe)
+    print(f"✅ [Realtime] Data: {data}")
     if not data:
-        return JSONResponse({"error": "Data fetch failed"}, status_code=500)
+        return JSONResponse({"error": "Realtime data fetch failed"}, status_code=500)
     return data
 
 @app.get("/historical")
 async def get_historical(timeframe: str = "5m"):
+    print(f"📚 [Historical] Endpoint hit | Timeframe: {timeframe}")
     data = get_historical_data(timeframe)
+    print(f"📊 [Historical] Data keys: {list(data.keys()) if data else 'None'}")
     if not data:
-        return JSONResponse({"error": "Data fetch failed"}, status_code=500)
+        return JSONResponse({"error": "Historical data fetch failed"}, status_code=500)
     return data

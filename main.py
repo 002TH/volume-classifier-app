@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import requests
+import os
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -17,15 +18,20 @@ def get_klines(interval="5m", limit=50):
         if interval not in SUPPORTED_TIMEFRAMES:
             interval = "5m"
         
+        headers = {
+            "X-MBX-APIKEY": os.getenv("BINANCE_API_KEY")
+        }
+
         response = requests.get(f"{BINANCE_API}/klines", params={
             "symbol": SYMBOL,
             "interval": interval,
             "limit": limit
-        }, timeout=15)
+        }, headers=headers, timeout=15)
+
         response.raise_for_status()
         return response.json()
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"[❌ Klines Error] {e}")
         return None
 
 def calculate_delta(candle):

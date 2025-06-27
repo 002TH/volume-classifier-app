@@ -3,4 +3,4 @@ uvicorn
 requests
 numpy
 pytz
-websocket 
+websockets

@@ -9,17 +9,21 @@ import os
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Constants
 BINANCE_API = "https://api.binance.com/api/v3"
 SYMBOL = "SOLUSDT"
 SUPPORTED_TIMEFRAMES = ["1m", "3m", "5m", "15m", "30m", "1h"]
+
+# Your Binance API Key from Render's environment settings
+API_KEY = os.getenv("BINANCE_API_KEY")
 
 def get_klines(interval="5m", limit=50):
     try:
         if interval not in SUPPORTED_TIMEFRAMES:
             interval = "5m"
-        
+
         headers = {
-            "X-MBX-APIKEY": os.getenv("BINANCE_API_KEY")
+            "X-MBX-APIKEY": API_KEY
         }
 
         response = requests.get(f"{BINANCE_API}/klines", params={
@@ -30,6 +34,7 @@ def get_klines(interval="5m", limit=50):
 
         response.raise_for_status()
         return response.json()
+
     except Exception as e:
         print(f"[❌ Klines Error] {e}")
         return None

@@ -141,3 +141,7 @@ def get_historical(timeframe: str = "5m"):
     }
     print(f"📊 [Historical] Data keys: {list(response.keys())}")
     return response
+
+@app.get("/")
+def root():
+    return {"message": "App is working!"}
